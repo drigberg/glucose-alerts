@@ -27,12 +27,3 @@ class SignalClient:
         response.raise_for_status()
         return response.json()
 
-
-if __name__ == "__main__":
-    load_dotenv()
-    client = SignalClient(
-        api_url=os.getenv("SIGNAL_API_URL"),
-        sender=os.getenv("SIGNAL_SENDER"),
-        group_id=os.getenv("SIGNAL_GROUP_ID"),
-    )
-    client.send("Hello from glucose-alerts!")

@@ -2,6 +2,7 @@ import json
 import os
 import typing
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from dotenv import load_dotenv
 from email_client import EmailClient
@@ -14,12 +15,22 @@ from pylibrelinkup import PyLibreLinkUp
 MIN_SECONDS_SINCE_LAST_DATA_FOR_FETCH = 50.0
 
 class AlertLevel(Enum):
+    TEST = 4
     GOOD = 3
     TARGET = 2
     WARNING = 1
     EMERGENCY = 0
 
+ALERT_LEVEL_COLORS = {
+    AlertLevel.TEST: "#8e24aa",
+    AlertLevel.GOOD: "#039be5",
+    AlertLevel.TARGET: "#43a047",
+    AlertLevel.WARNING: "#f9a825",
+    AlertLevel.EMERGENCY: "#c62828",
+}
+
 ALERT_LEVEL_THRESHOLDS = {
+    AlertLevel.TEST: 100.0,
     AlertLevel.GOOD: 15.0,
     AlertLevel.TARGET: 10.0,
     AlertLevel.WARNING: 7.5,
@@ -35,24 +46,35 @@ def load_template(name: str) -> Template:
 def log(message: str):
     print(f"[glucose-alerts] [{datetime.now().isoformat()}] - {message}")
 
+@dataclass
+class Config:
+    libre_username: str
+    libre_password: str
+    email_sender: str
+    signal_api_url: str
+    signal_sender: str
+    signal_group_id: str
+    force_send_test: bool
+
 class GlucoseMonitor:
     email_client: EmailClient
     signal_client: SignalClient
     libre_client: PyLibreLinkUp
     data: typing.Any
     alerts: typing.Any
+    force_send_test: bool
 
-    def __init__(self, injected_data=None, injected_alerts=None):
-        load_dotenv()
-        self.email_client = EmailClient(sender=os.getenv("EMAIL_SENDER"))
+    def __init__(self, config: Config, injected_data=None, injected_alerts=None):
+        self.email_client = EmailClient(sender=config.email_sender)
         self.signal_client = SignalClient(
-            api_url=os.getenv("SIGNAL_API_URL", ""),
-            sender=os.getenv("SIGNAL_SENDER", ""),
-            group_id=os.getenv("SIGNAL_GROUP_ID", ""),
+            api_url=config.signal_api_url,
+            sender=config.signal_sender,
+            group_id=config.signal_group_id,
         )
-        self.libre_client = PyLibreLinkUp(email=os.getenv("LIBRE_USERNAME"), password=os.getenv("LIBRE_PASSWORD"))
+        self.libre_client = PyLibreLinkUp(email=config.libre_username, password=config.libre_password)
         self.data = injected_data if injected_data is not None else self.load_data()
         self.alerts = injected_alerts if injected_alerts is not None else self.load_alerts()
+        self.force_send_test = config.force_send_test
 
     def load_alerts(self):
         os.makedirs('data', exist_ok=True)
@@ -149,6 +171,9 @@ class GlucoseMonitor:
         log(f"Latest alert: {latest_alert_level.name} ({latest_alert_type}) at {self.latest_alert["timestamp"]}")
         log(f"Current alert level: {current_alert_level.name if current_alert_level is not None else 'None'}")
         
+        if self.force_send_test is True:
+            return {"level": AlertLevel.TEST, "type": "ALERT"}
+
         if current_alert_level is None:
             # No alert level -- do nothing
             return None
@@ -179,6 +204,8 @@ class GlucoseMonitor:
             if level == AlertLevel.WARNING:
                 return "He's recovering slightly, but his glucose is still quite low. Continue to monitor closely and be ready to intervene."
         else:
+            if level == AlertLevel.TEST:
+                return "This is just a test! Chips is probably doing just fine right now. He's a good boyo!"
             if level == AlertLevel.GOOD:
                 return "He's dropped to the upper half of his target range! That's awesome."
             if level == AlertLevel.TARGET:
@@ -222,7 +249,7 @@ class GlucoseMonitor:
         alert_type = alert["type"]
 
         emoji = "⬆️" if alert_type == "RECOVERY" else "⬇️"
-        status_color = "#2e7d32" if alert_type == "RECOVERY" else "#c62828"
+        status_color = ALERT_LEVEL_COLORS[alert["level"]]
         advice = self.get_advice(alert)
 
         alerts_html = ""
@@ -232,7 +259,7 @@ class GlucoseMonitor:
             rows = ""
             for a in todays_alerts:
                 timestamp = datetime.fromisoformat(a["timestamp"]).strftime("%H:%M")
-                row_color = "#2e7d32" if a["type"] == "RECOVERY" else "#c62828"
+                row_color = ALERT_LEVEL_COLORS.get(AlertLevel[a["level"]], "#555")
                 rows += row_template.substitute(timestamp=timestamp, row_color=row_color, level=a["level"], type=a["type"])
             section_template = load_template("email_alerts_section.template")
             alerts_html = section_template.substitute(rows=rows)
@@ -266,24 +293,36 @@ class GlucoseMonitor:
                 body_text=self.format_email_body_text(alert),
                 body_html=self.format_email_body_html(alert))
         except Exception as e:
-            log(f"Error sending email: {e}")
+            log(f"Error sending email!")
+            print("Error:", e)
 
         try:
             self.signal_client.send(self.format_signal_message(alert))
         except Exception as e:
             log(f"Error sending Signal message: {e}")
 
-        self.alerts.append({ 
-            "timestamp": datetime.now().isoformat(),
-            "level": alert["level"].name,
-            "type": alert["type"],
-        })
-        self.save_alerts()
+        if alert["level"] != AlertLevel.TEST.name:
+            self.alerts.append({ 
+                "timestamp": datetime.now().isoformat(),
+                "level": alert["level"].name,
+                "type": alert["type"],
+            })
+            self.save_alerts()
     
 def main():
     log("Running script!")
 
-    monitor = GlucoseMonitor()
+    load_dotenv()
+    config = Config(
+        email_sender=os.getenv("EMAIL_SENDER", ""),
+        signal_api_url=os.getenv("SIGNAL_API_URL", ""),
+        signal_sender=os.getenv("SIGNAL_SENDER", ""),
+        signal_group_id=os.getenv("SIGNAL_GROUP_ID", ""),
+        libre_username=os.getenv("LIBRE_USERNAME", ""),
+        libre_password=os.getenv("LIBRE_PASSWORD", ""),
+        force_send_test=(os.getenv("FORCE_SEND_TEST") == "true"))
+
+    monitor = GlucoseMonitor(config)
 
     should_wait = monitor.should_wait()
     if should_wait:

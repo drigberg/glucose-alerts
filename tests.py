@@ -1,9 +1,21 @@
 import unittest
-from main import GlucoseMonitor, AlertLevel
+from main import GlucoseMonitor, AlertLevel, Config
+
+
+test_config = Config(
+    email_sender="test@example.com",
+    signal_api_url="http://localhost:8080",
+    signal_sender="+31630645264",
+    signal_group_id="group.YkpJNzZNME1mSlFiNW9qTU5QUnRWdFRGV2dhUzVkNjd3c2JVWjduMXNMOD0=",
+    libre_username="test@example.com",
+    libre_password="test",
+    force_send_test=False,
+)
 
 class TestGlucoseMonitor(unittest.TestCase):
     def test_get_current_alert_level_no_history(self):
         monitor = GlucoseMonitor(
+            config=test_config,
             injected_data=[],
             injected_alerts=[])
         self.assertEqual(monitor.get_current_alert_level(), None)
@@ -25,6 +37,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         for latest_value, expected_alert_level in param_list:
             with self.subTest(latest_value):
                 monitor = GlucoseMonitor(
+                    config=test_config,
                     injected_data=[
                         {"timestamp": "2026-09-17T12:00:00", "value": 27.8},
                         {"timestamp": "2026-09-17T12:01:00", "value": latest_value}
@@ -40,6 +53,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         for latest_value, expected_alert_level, expected_alert_type in param_list:
             with self.subTest(latest_value):
                 monitor = GlucoseMonitor(
+                    config=test_config,
                     injected_data=[
                         {"timestamp": "2026-09-17T12:00:00", "value": 27.8},
                         {"timestamp": "2026-09-17T12:01:00", "value": latest_value}
@@ -57,6 +71,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         for latest_value in param_list:
             with self.subTest(latest_value):
                 monitor = GlucoseMonitor(
+                    config=test_config,
                     injected_data=[
                         {"timestamp": "2026-09-17T12:00:00", "value": 27.8},
                         {"timestamp": "2026-09-17T12:01:00", "value": latest_value}
@@ -74,6 +89,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         for latest_value, expected_alert_level, expected_alert_type in param_list:
             with self.subTest(latest_value):
                 monitor = GlucoseMonitor(
+                    config=test_config,
                     injected_data=[
                         {"timestamp": "2026-09-17T12:00:00", "value": 27.8},
                         {"timestamp": "2026-09-17T12:01:00", "value": latest_value}
@@ -94,6 +110,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         for latest_value, expected_alert_level, expected_alert_type in param_list:
             with self.subTest(latest_value):
                 monitor = GlucoseMonitor(
+                    config=test_config,
                     injected_data=[
                         {"timestamp": "2026-09-17T12:01:00", "value": latest_value}
                     ],
@@ -112,6 +129,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         for latest_value, expected_alert_level, expected_alert_type in param_list:
             with self.subTest(latest_value):
                 monitor = GlucoseMonitor(
+                    config=test_config,
                     injected_data=[
                         {"timestamp": "2026-09-17T12:00:00", "value": 27.8},
                         {"timestamp": "2026-09-17T12:01:00", "value": latest_value}
@@ -132,6 +150,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         for latest_value, expected_alert_level, expected_alert_type in param_list:
             with self.subTest(latest_value):
                 monitor = GlucoseMonitor(
+                    config=test_config,
                     injected_data=[
                         {"timestamp": "2026-09-17T12:00:00", "value": latest_value},
                         {"timestamp": "2026-09-17T12:01:00", "value": latest_value},
@@ -151,6 +170,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         for latest_value, expected_alert_level, expected_alert_type in param_list:
             with self.subTest(latest_value):
                 monitor = GlucoseMonitor(
+                    config=test_config,
                     injected_data=[
                         {"timestamp": "2026-09-17T12:00:00", "value": latest_value},
                         {"timestamp": "2026-09-17T12:01:00", "value": latest_value},
@@ -168,6 +188,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         """Recovery alerts should be suppressed if fewer than 3 recent values are above the threshold."""
         # Only 2 data points
         monitor = GlucoseMonitor(
+            config=test_config,
             injected_data=[
                 {"timestamp": "2026-09-17T12:00:00", "value": 11.0},
                 {"timestamp": "2026-09-17T12:01:00", "value": 11.0}
@@ -181,6 +202,7 @@ class TestGlucoseMonitor(unittest.TestCase):
     def test_should_not_send_recovery_if_recent_value_below_threshold(self):
         """Recovery should be suppressed if any of the last 3 values is below the last alert level's threshold."""
         monitor = GlucoseMonitor(
+            config=test_config,
             injected_data=[
                 {"timestamp": "2026-09-17T12:00:00", "value": 11.0},
                 {"timestamp": "2026-09-17T12:01:00", "value": 7.0},
@@ -201,6 +223,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         for latest_value, alert_level in param_list:
             with self.subTest(latest_value):
                 monitor = GlucoseMonitor(
+                    config=test_config,
                     injected_data=[
                         {"timestamp": "2026-09-17T12:00:00", "value": 27.8},
                         {"timestamp": "2026-09-17T12:01:00", "value": latest_value}
@@ -221,7 +244,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         ]
         for level, alert_type, expected_snippet in cases:
             with self.subTest(f"{level.name}-{alert_type}"):
-                monitor = GlucoseMonitor(injected_data=[], injected_alerts=[])
+                monitor = GlucoseMonitor(config=test_config, injected_data=[], injected_alerts=[])
                 advice = monitor.get_advice({"level": level, "type": alert_type})
                 self.assertIn(expected_snippet, advice)
 
@@ -233,7 +256,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         ]
         for level, alert_type, expected_snippet in cases:
             with self.subTest(f"{level.name}-{alert_type}"):
-                monitor = GlucoseMonitor(injected_data=[], injected_alerts=[])
+                monitor = GlucoseMonitor(config=test_config, injected_data=[], injected_alerts=[])
                 advice = monitor.get_advice({"level": level, "type": alert_type})
                 self.assertIn(expected_snippet, advice)
 
@@ -241,6 +264,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         from datetime import datetime
         today = datetime.now().isoformat()
         monitor = GlucoseMonitor(
+            config=test_config,
             injected_data=[],
             injected_alerts=[
                 {"level": "WARNING", "type": "ALERT", "timestamp": "2025-01-01T12:00:00"},
@@ -256,6 +280,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         from datetime import datetime
         today = datetime.now().isoformat()
         monitor = GlucoseMonitor(
+            config=test_config,
             injected_data=[
                 {"timestamp": "2026-09-17T12:01:00", "value": 4.5}
             ],
@@ -272,6 +297,7 @@ class TestGlucoseMonitor(unittest.TestCase):
 
     def test_format_email_body_text_recovery(self):
         monitor = GlucoseMonitor(
+            config=test_config,
             injected_data=[
                 {"timestamp": "2026-09-17T12:01:00", "value": 12.0}
             ],
@@ -284,6 +310,7 @@ class TestGlucoseMonitor(unittest.TestCase):
 
     def test_format_email_body_text_no_todays_alerts(self):
         monitor = GlucoseMonitor(
+            config=test_config,
             injected_data=[
                 {"timestamp": "2026-09-17T12:01:00", "value": 7.0}
             ],
@@ -298,6 +325,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         from datetime import datetime
         today = datetime.now().isoformat()
         monitor = GlucoseMonitor(
+            config=test_config,
             injected_data=[
                 {"timestamp": "2026-09-17T12:01:00", "value": 7.0}
             ],
@@ -319,6 +347,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         from datetime import datetime
         today = datetime.now().isoformat()
         monitor = GlucoseMonitor(
+            config=test_config,
             injected_data=[
                 {"timestamp": "2026-09-17T12:01:00", "value": 4.5}
             ],
@@ -336,6 +365,7 @@ class TestGlucoseMonitor(unittest.TestCase):
 
     def test_format_email_body_html_recovery(self):
         monitor = GlucoseMonitor(
+            config=test_config,
             injected_data=[
                 {"timestamp": "2026-09-17T12:01:00", "value": 12.0}
             ],
@@ -344,10 +374,11 @@ class TestGlucoseMonitor(unittest.TestCase):
         html = monitor.format_email_body_html(alert)
         self.assertIn("12.0", html)
         self.assertIn("Recovery", html)
-        self.assertIn("#2e7d32", html)
+        self.assertIn("#039be5", html)
 
     def test_format_email_body_html_no_todays_alerts(self):
         monitor = GlucoseMonitor(
+            config=test_config,
             injected_data=[
                 {"timestamp": "2026-09-17T12:01:00", "value": 7.0}
             ],
@@ -360,6 +391,7 @@ class TestGlucoseMonitor(unittest.TestCase):
 
     def test_format_email_body_html_alert_uses_red(self):
         monitor = GlucoseMonitor(
+            config=test_config,
             injected_data=[
                 {"timestamp": "2026-09-17T12:01:00", "value": 4.5}
             ],
@@ -370,6 +402,7 @@ class TestGlucoseMonitor(unittest.TestCase):
 
     def test_format_signal_message_alert(self):
         monitor = GlucoseMonitor(
+            config=test_config,
             injected_data=[
                 {"timestamp": "2026-09-17T12:01:00", "value": 4.5}
             ],
@@ -383,6 +416,7 @@ class TestGlucoseMonitor(unittest.TestCase):
 
     def test_format_signal_message_recovery(self):
         monitor = GlucoseMonitor(
+            config=test_config,
             injected_data=[
                 {"timestamp": "2026-09-17T12:01:00", "value": 12.0}
             ],
@@ -392,6 +426,75 @@ class TestGlucoseMonitor(unittest.TestCase):
         self.assertIn("12.0", message)
         self.assertIn("⬆️", message)
         self.assertIn("Recovery", message)
+
+    def test_force_send_test_returns_test_alert(self):
+        monitor = GlucoseMonitor(
+            config=Config(
+                email_sender="test@example.com",
+                signal_api_url="http://localhost:8080",
+                signal_sender="+31630645264",
+                signal_group_id="group.YkpJNzZNME1mSlFiNW9qTU5QUnRWdFRGV2dhUzVkNjd3c2JVWjduMXNMOD0=",
+                libre_username="test@example.com",
+                libre_password="test",
+                force_send_test=True),
+            injected_data=[
+                {"timestamp": "2026-09-17T12:00:00", "value": 27.8},
+            ],
+            injected_alerts=[])
+        alert = monitor.should_send_alert()
+        self.assertEqual(alert["level"], AlertLevel.TEST)
+        self.assertEqual(alert["type"], "ALERT")
+
+    def test_force_send_test_ignores_current_level(self):
+        """force_send_test should return a TEST alert regardless of the current glucose value."""
+        monitor = GlucoseMonitor(
+            config=Config(
+                email_sender="test@example.com",
+                signal_api_url="http://localhost:8080",
+                signal_sender="+31630645264",
+                signal_group_id="group.YkpJNzZNME1mSlFiNW9qTU5QUnRWdFRGV2dhUzVkNjd3c2JVWjduMXNMOD0=",
+                libre_username="test@example.com",
+                libre_password="test",
+                force_send_test=True),
+            injected_data=[
+                {"timestamp": "2026-09-17T12:00:00", "value": 4.0},
+            ],
+            injected_alerts=[
+                {"timestamp": "2026-09-17T11:55:00", "level": "EMERGENCY", "type": "ALERT"},
+            ])
+        alert = monitor.should_send_alert()
+        self.assertEqual(alert["level"], AlertLevel.TEST)
+        self.assertEqual(alert["type"], "ALERT")
+
+    def test_get_advice_test_alert(self):
+        monitor = GlucoseMonitor(config=test_config, injected_data=[], injected_alerts=[])
+        advice = monitor.get_advice({"level": AlertLevel.TEST, "type": "ALERT"})
+        self.assertIn("test", advice.lower())
+
+    def test_format_email_body_html_test_uses_violet(self):
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": "2026-09-17T12:01:00", "value": 20.0}
+            ],
+            injected_alerts=[])
+        alert = {"level": AlertLevel.TEST, "type": "ALERT"}
+        html = monitor.format_email_body_html(alert)
+        self.assertIn("#8e24aa", html)
+        self.assertIn("TEST", html)
+
+    def test_format_signal_message_test(self):
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": "2026-09-17T12:01:00", "value": 20.0}
+            ],
+            injected_alerts=[])
+        alert = {"level": AlertLevel.TEST, "type": "ALERT"}
+        message = monitor.format_signal_message(alert)
+        self.assertIn("20.0", message)
+        self.assertIn("TEST", message)
+        self.assertIn("test", message.lower())
 
 if __name__ == '__main__':
     unittest.main()
