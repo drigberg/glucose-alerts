@@ -17,7 +17,7 @@ def log(message: str):
     print(f"[glucose-alerts] [{datetime.now().isoformat()}] - {message}")
 
 SOFT_THRESHOLD = 10.0
-WARNING_THRESHOLD = 6.0
+WARNING_THRESHOLD = 7.5
 EMERGENCY_THRESHOLD = 5.0
 
 class GlucoseMonitor:
@@ -25,11 +25,11 @@ class GlucoseMonitor:
     data: typing.Any
     alerts: typing.Any
 
-    def __init__(self):
+    def __init__(self, injected_data, injected_alerts):
         load_dotenv()
         self.client = PyLibreLinkUp(email=os.getenv("USERNAME"), password=os.getenv("PASSWORD"))
-        self.data = self.load_data()
-        self.alerts = self.load_alerts()
+        self.data = injected_data or self.load_data()
+        self.alerts = injected_alerts or self.load_alerts()
 
     def load_alerts(self):
         with open('data/alerts.json') as f:
@@ -86,7 +86,7 @@ class GlucoseMonitor:
             return AlertLevel.EMERGENCY
         if self.data[-1]["value"] <= WARNING_THRESHOLD:
             return AlertLevel.WARNING
-        if self.data[-1]["value"] > SOFT_THRESHOLD:
+        if self.data[-1]["value"] <= SOFT_THRESHOLD:
             return AlertLevel.SOFT
         return AlertLevel.NONE
 

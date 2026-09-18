@@ -9,6 +9,12 @@
 5. Create a `.env` file in this repo, matching the syntax of `.env.example`
 6. Run the script: `python3 main.py`
 
+### Development
+
+Saving depencies: `python3 -m pip freeze > requirements.txt`
+Running tests: `python3 -m unittest`
+Type-checking: `mypy .`
+
 ### Design
 
 Requirements:
