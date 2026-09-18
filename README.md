@@ -7,7 +7,8 @@
 3. Ensure that pip is up to date: `python3 -m pip install --upgrade pip`
 4. Install all dependencies: `python3 -m pip install -r requirements.txt`
 5. Create a `.env` file in this repo, matching the syntax of `.env.example`
-6. Run the script: `python3 main.py`
+6. Start the Signal server: `bash start_signal_server.sh`
+7. Run the script: `python3 main.py`
 
 ### Development
 
