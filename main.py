@@ -8,10 +8,10 @@ from enum import Enum
 import uuid
 
 class AlertLevel(Enum):
-    NONE = 0
-    SOFT = 1
-    WARNING = 2
-    EMERGENCY = 3
+    NONE = 3
+    SOFT = 2
+    WARNING = 1
+    EMERGENCY = 0
 
 def log(message: str):
     print(f"[glucose-alerts] [{datetime.now().isoformat()}] - {message}")
@@ -102,7 +102,7 @@ class GlucoseMonitor:
                 return None
             # Regression after recovery
             return {"level": current_alert_level, "type": "ALERT"}
-        if current_alert_level.value < latest_alert_level.value:
+        if current_alert_level.value > latest_alert_level.value:
             # Standard recovery
             return {"level": current_alert_level, "type": "RECOVERY"}
         # Standard alert
