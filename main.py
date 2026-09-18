@@ -11,13 +11,14 @@ from pylibrelinkup import PyLibreLinkUp
 
 MIN_SECONDS_SINCE_LAST_DATA_FOR_FETCH = 50.0
 
-SOFT_THRESHOLD = 10.0
+TARGET_THRESHOLD = 15.0
+LOW_THRESHOLD = 10.0
 WARNING_THRESHOLD = 7.5
 EMERGENCY_THRESHOLD = 5.0
 
 class AlertLevel(Enum):
-    NONE = 3
-    SOFT = 2
+    TARGET = 3
+    LOW = 2
     WARNING = 1
     EMERGENCY = 0
 
@@ -73,7 +74,7 @@ class GlucoseMonitor:
 
     @property
     def latest_alert(self):
-        return self.alerts[-1] if len(self.alerts) > 0 else {"type":"RECOVERY", "level":"NONE"}
+        return self.alerts[-1] if len(self.alerts) > 0 else {"type":"RECOVERY", "level":"TARGET"}
 
     def get_seconds_since_latest_stored_value(self):
         latest_datetime = datetime.fromisoformat(self.latest_stored_value["timestamp"]) 
@@ -112,14 +113,16 @@ class GlucoseMonitor:
         self.save_data()
         return self.latest_stored_value
     
-    def get_current_alert_level(self) -> AlertLevel:
+    def get_current_alert_level(self) -> typing.Optional[AlertLevel]:
         if self.latest_stored_value["value"] <= EMERGENCY_THRESHOLD:
             return AlertLevel.EMERGENCY
         if self.latest_stored_value["value"] <= WARNING_THRESHOLD:
             return AlertLevel.WARNING
-        if self.latest_stored_value["value"] <= SOFT_THRESHOLD:
-            return AlertLevel.SOFT
-        return AlertLevel.NONE
+        if self.latest_stored_value["value"] <= LOW_THRESHOLD:
+            return AlertLevel.LOW
+        if self.latest_stored_value["value"] <= TARGET_THRESHOLD:
+            return AlertLevel.TARGET
+        return None
 
     
     def should_send_alert(self) -> typing.Optional[dict]:
@@ -127,6 +130,9 @@ class GlucoseMonitor:
         latest_alert_type = self.latest_alert["type"]
         current_alert_level = self.get_current_alert_level()
 
+        if current_alert_level is None:
+            # No alert level -- do nothing
+            return None
         if current_alert_level == latest_alert_level:
             # No change -- do nothing, regardless of last alert's type
             return None
