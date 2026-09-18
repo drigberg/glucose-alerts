@@ -16,6 +16,7 @@ Run tests and type checks: `bash ./run-tests-and-lint.sh`
   - An alert is sent whenever a data point falls below a new threshold, as compared against the last alert
   - A recovery alerts is sent after receiving three consecutive values above the last alert's threshold
 - Sends alerts to one email address and one Signal group
+- Setting `FORCE_SEND_TEST=true` in `.env` overrides the alert level to `TEST` and sends alerts with the latest reading (still requires a new data point)
 
 ### TODO
 
