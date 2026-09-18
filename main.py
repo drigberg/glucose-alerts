@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import traceback
 import typing
 import uuid
 from dataclasses import dataclass
@@ -306,7 +307,10 @@ class GlucoseMonitor:
             log(f"Successfully sent email!")
         except Exception as e:
             log(f"Error sending email!")
-            print("Error:", e)
+            template = "Error type: {0}\n Arguments:\n{1!r}"
+            message = template.format(type(e).__name__, e.args)
+            print(message)
+            print(traceback.format_exc())
 
         try:
             html = self.format_email_body_html(alert)
@@ -321,9 +325,13 @@ class GlucoseMonitor:
             )
             log(f"Successfully sent Signal message!")
         except Exception as e:
-            log(f"Error sending Signal message: {e}")
+            log(f"Error sending Signal message!")
+            print("Error:", e)
+            message = template.format(type(e).__name__, e.args)
+            print(message)
+            print(traceback.format_exc())
 
-        if alert["level"] != AlertLevel.TEST.name:
+        if alert["level"] != AlertLevel.TEST:
             self.alerts.append({ 
                 "timestamp": datetime.now().isoformat(),
                 "level": alert["level"].name,

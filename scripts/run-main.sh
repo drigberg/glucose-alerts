@@ -1,0 +1,1 @@
+docker compose run --rm glucose-alerts python main.py
