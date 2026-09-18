@@ -6,6 +6,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from email_client import EmailClient
 from enum import Enum
+from signal_client import SignalClient
 from string import Template
 
 from pylibrelinkup import PyLibreLinkUp
@@ -36,6 +37,7 @@ def log(message: str):
 
 class GlucoseMonitor:
     email_client: EmailClient
+    signal_client: SignalClient
     libre_client: PyLibreLinkUp
     data: typing.Any
     alerts: typing.Any
@@ -43,6 +45,11 @@ class GlucoseMonitor:
     def __init__(self, injected_data=None, injected_alerts=None):
         load_dotenv()
         self.email_client = EmailClient(sender=os.getenv("EMAIL_SENDER"))
+        self.signal_client = SignalClient(
+            api_url=os.getenv("SIGNAL_API_URL", ""),
+            sender=os.getenv("SIGNAL_SENDER", ""),
+            group_id=os.getenv("SIGNAL_GROUP_ID", ""),
+        )
         self.libre_client = PyLibreLinkUp(email=os.getenv("LIBRE_USERNAME"), password=os.getenv("LIBRE_PASSWORD"))
         self.data = injected_data if injected_data is not None else self.load_data()
         self.alerts = injected_alerts if injected_alerts is not None else self.load_alerts()
@@ -241,15 +248,30 @@ class GlucoseMonitor:
             alerts_html=alerts_html,
         )
 
+    def format_signal_message(self, alert: dict) -> str:
+        value = self.latest_stored_value["value"]
+        level_name = alert["level"].name
+        alert_type = alert["type"]
+        emoji = "⬆️" if alert_type == "RECOVERY" else "⬇️"
+        advice = self.get_advice(alert)
+        return f"{emoji} Chips Glucose {alert_type.title()}\n\nReading: {value} mmol/L — {level_name}\n\n{advice}"
+
     def send_alert(self, alert: dict):
         log(f"Sending alert {alert["level"].name}-{alert["type"]}")
 
-        # Send from sender to sender for now
-        self.email_client.send(
-            recipients=[os.getenv("EMAIL_SENDER")],
-            subject=self.format_email_subject(alert),
-            body_text=self.format_email_body_text(alert),
-            body_html=self.format_email_body_html(alert))
+        try:
+            self.email_client.send(
+                recipients=[os.getenv("EMAIL_SENDER")],
+                subject=self.format_email_subject(alert),
+                body_text=self.format_email_body_text(alert),
+                body_html=self.format_email_body_html(alert))
+        except Exception as e:
+            log(f"Error sending email: {e}")
+
+        try:
+            self.signal_client.send(self.format_signal_message(alert))
+        except Exception as e:
+            log(f"Error sending Signal message: {e}")
 
         self.alerts.append({ 
             "timestamp": datetime.now().isoformat(),

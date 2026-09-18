@@ -368,5 +368,30 @@ class TestGlucoseMonitor(unittest.TestCase):
         html = monitor.format_email_body_html(alert)
         self.assertIn("#c62828", html)
 
+    def test_format_signal_message_alert(self):
+        monitor = GlucoseMonitor(
+            injected_data=[
+                {"timestamp": "2026-09-17T12:01:00", "value": 4.5}
+            ],
+            injected_alerts=[])
+        alert = {"level": AlertLevel.EMERGENCY, "type": "ALERT"}
+        message = monitor.format_signal_message(alert)
+        self.assertIn("4.5", message)
+        self.assertIn("EMERGENCY", message)
+        self.assertIn("⬇️", message)
+        self.assertIn("dangerously low", message)
+
+    def test_format_signal_message_recovery(self):
+        monitor = GlucoseMonitor(
+            injected_data=[
+                {"timestamp": "2026-09-17T12:01:00", "value": 12.0}
+            ],
+            injected_alerts=[])
+        alert = {"level": AlertLevel.GOOD, "type": "RECOVERY"}
+        message = monitor.format_signal_message(alert)
+        self.assertIn("12.0", message)
+        self.assertIn("⬆️", message)
+        self.assertIn("Recovery", message)
+
 if __name__ == '__main__':
     unittest.main()
