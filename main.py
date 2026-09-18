@@ -12,14 +12,14 @@ from pylibrelinkup import PyLibreLinkUp
 MIN_SECONDS_SINCE_LAST_DATA_FOR_FETCH = 50.0
 
 class AlertLevel(Enum):
-    TARGET = 3
-    LOW = 2
+    GOOD = 3
+    TARGET = 2
     WARNING = 1
     EMERGENCY = 0
 
 ALERT_LEVEL_THRESHOLDS = {
-    AlertLevel.TARGET: 15.0,
-    AlertLevel.LOW: 10.0,
+    AlertLevel.GOOD: 15.0,
+    AlertLevel.TARGET: 10.0,
     AlertLevel.WARNING: 7.5,
     AlertLevel.EMERGENCY: 5.0,
 }
@@ -76,7 +76,7 @@ class GlucoseMonitor:
 
     @property
     def latest_alert(self):
-        return self.alerts[-1] if len(self.alerts) > 0 else {"timestamp":"2026-01-01T12:00:00", "type":"RECOVERY", "level":"TARGET",}
+        return self.alerts[-1] if len(self.alerts) > 0 else {"timestamp":"2026-01-01T12:00:00", "type":"RECOVERY", "level":"GOOD",}
 
     def get_seconds_since_latest_stored_value(self):
         latest_datetime = datetime.fromisoformat(self.latest_stored_value["timestamp"]) 
@@ -120,10 +120,10 @@ class GlucoseMonitor:
             return AlertLevel.EMERGENCY
         if self.latest_stored_value["value"] <= ALERT_LEVEL_THRESHOLDS[AlertLevel.WARNING]:
             return AlertLevel.WARNING
-        if self.latest_stored_value["value"] <= ALERT_LEVEL_THRESHOLDS[AlertLevel.LOW]:
-            return AlertLevel.LOW
         if self.latest_stored_value["value"] <= ALERT_LEVEL_THRESHOLDS[AlertLevel.TARGET]:
             return AlertLevel.TARGET
+        if self.latest_stored_value["value"] <= ALERT_LEVEL_THRESHOLDS[AlertLevel.GOOD]:
+            return AlertLevel.GOOD
         return None
 
     
@@ -132,6 +132,10 @@ class GlucoseMonitor:
         latest_alert_type = self.latest_alert["type"]
         current_alert_level = self.get_current_alert_level()
 
+        print(self.latest_alert)
+        log(f"Latest alert: {latest_alert_level.name} ({latest_alert_type}) at {self.latest_alert["timestamp"]}")
+        log(f"Current alert level: {current_alert_level.name if current_alert_level is not None else 'None'}")
+        
         if current_alert_level is None:
             # No alert level -- do nothing
             return None
@@ -148,14 +152,65 @@ class GlucoseMonitor:
         # Alert
         return {"level": current_alert_level, "type": "ALERT"}
 
+    def format_email_subject(self, alert: dict) -> str:
+        return f"Chips Glucose Alert: {alert["level"].name} ({alert["type"]})"
+
+    def get_advice(self, alert: dict) -> str:
+        level = alert["level"]
+        alert_type = alert["type"]
+        if alert_type == "RECOVERY":
+            if level == AlertLevel.GOOD:
+                return "He's out of his target range, but still in a good place! No action needed."
+            if level == AlertLevel.TARGET:
+                return "He's back into his target range! It's too soon to tell if he's going to drop again, so keep monitoring just to be safe."
+            if level == AlertLevel.WARNING:
+                return "He's recovering slightly, but his glucose is still quite low. Continue to monitor closely and be ready to intervene."
+        else:
+            if level == AlertLevel.GOOD:
+                return "He's dropped to the upper half of his target range! That's awesome."
+            if level == AlertLevel.TARGET:
+                return "His glucose is in the perfect range! Just keep an eye on him in case it drops further."
+            if level == AlertLevel.WARNING:
+                return "His glucose is still in a good range, but trending a little low! Monitor his behavior closely, consider giving him a snack, and have honey/dextrose ready in case he drops further or shows signs of distress."
+            if level == AlertLevel.EMERGENCY:
+                return "His glucose is dangerously low! Monitor his behavior and rub honey/dextrose into his gums if he's showing signs of distress (quietly meowing, breathing fast, wobbling, drooling, vomiting)."
+        return ""
+
+    def get_todays_alerts(self) -> list:
+        today = datetime.now().date()
+        return [a for a in self.alerts if datetime.fromisoformat(a["timestamp"]).date() == today]
+
+    def format_email_body(self, alert: dict) -> str:
+        value = self.latest_stored_value["value"]
+        level_name = alert["level"].name
+        alert_type = alert["type"]
+
+        type_description = "⬆️ RECOVERY" if alert_type == "RECOVERY" else "⬇️ ALERT"
+        lines = [
+            f"Current reading: {value} mmol/L",
+            f"Status: {type_description} — {level_name}",
+            "",
+            self.get_advice(alert),
+        ]
+
+        todays_alerts = self.get_todays_alerts()[-5:]
+        if todays_alerts:
+            lines.append("")
+            lines.append("--- Recent alerts today ---")
+            for a in todays_alerts:
+                timestamp = datetime.fromisoformat(a["timestamp"]).strftime("%H:%M")
+                lines.append(f"  {timestamp} — {a['level']} ({a['type']})")
+
+        return "\n".join(lines)
+
     def send_alert(self, alert: dict):
         log(f"Sending alert {alert["level"].name}-{alert["type"]}")
 
         # Send from sender to sender for now
         self.email_client.send(
             recipients=[os.getenv("EMAIL_SENDER")],
-            subject="Chips Glucose Alert!",
-            body=f"Value: {self.latest_stored_value["value"]}\nLevel: {alert["level"].name}\nType: {alert["type"]}")
+            subject=self.format_email_subject(alert),
+            body=self.format_email_body(alert))
 
         self.alerts.append({ 
             "timestamp": datetime.now().isoformat(),
