@@ -11,16 +11,18 @@ from pylibrelinkup import PyLibreLinkUp
 
 MIN_SECONDS_SINCE_LAST_DATA_FOR_FETCH = 50.0
 
-TARGET_THRESHOLD = 15.0
-LOW_THRESHOLD = 10.0
-WARNING_THRESHOLD = 7.5
-EMERGENCY_THRESHOLD = 5.0
-
 class AlertLevel(Enum):
     TARGET = 3
     LOW = 2
     WARNING = 1
     EMERGENCY = 0
+
+ALERT_LEVEL_THRESHOLDS = {
+    AlertLevel.TARGET: 15.0,
+    AlertLevel.LOW: 10.0,
+    AlertLevel.WARNING: 7.5,
+    AlertLevel.EMERGENCY: 5.0,
+}
 
 def log(message: str):
     print(f"[glucose-alerts] [{datetime.now().isoformat()}] - {message}")
@@ -74,7 +76,7 @@ class GlucoseMonitor:
 
     @property
     def latest_alert(self):
-        return self.alerts[-1] if len(self.alerts) > 0 else {"type":"RECOVERY", "level":"TARGET"}
+        return self.alerts[-1] if len(self.alerts) > 0 else {"timestamp":"2026-01-01T12:00:00", "type":"RECOVERY", "level":"TARGET",}
 
     def get_seconds_since_latest_stored_value(self):
         latest_datetime = datetime.fromisoformat(self.latest_stored_value["timestamp"]) 
@@ -114,13 +116,13 @@ class GlucoseMonitor:
         return self.latest_stored_value
     
     def get_current_alert_level(self) -> typing.Optional[AlertLevel]:
-        if self.latest_stored_value["value"] <= EMERGENCY_THRESHOLD:
+        if self.latest_stored_value["value"] <= ALERT_LEVEL_THRESHOLDS[AlertLevel.EMERGENCY]:
             return AlertLevel.EMERGENCY
-        if self.latest_stored_value["value"] <= WARNING_THRESHOLD:
+        if self.latest_stored_value["value"] <= ALERT_LEVEL_THRESHOLDS[AlertLevel.WARNING]:
             return AlertLevel.WARNING
-        if self.latest_stored_value["value"] <= LOW_THRESHOLD:
+        if self.latest_stored_value["value"] <= ALERT_LEVEL_THRESHOLDS[AlertLevel.LOW]:
             return AlertLevel.LOW
-        if self.latest_stored_value["value"] <= TARGET_THRESHOLD:
+        if self.latest_stored_value["value"] <= ALERT_LEVEL_THRESHOLDS[AlertLevel.TARGET]:
             return AlertLevel.TARGET
         return None
 
@@ -137,7 +139,11 @@ class GlucoseMonitor:
             # No change -- do nothing, regardless of last alert's type
             return None
         if current_alert_level.value > latest_alert_level.value:
-            # Recovery
+            # Recovery -- only send if the most recent 3 values are all above the last alert level's threshold
+            threshold = ALERT_LEVEL_THRESHOLDS[latest_alert_level]
+            recent_values = [d["value"] for d in self.data[-3:]]
+            if len(recent_values) < 3 or not all(v >= threshold for v in recent_values):
+                return None
             return {"level": current_alert_level, "type": "RECOVERY"}
         # Alert
         return {"level": current_alert_level, "type": "ALERT"}

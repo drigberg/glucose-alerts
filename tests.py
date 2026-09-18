@@ -133,8 +133,9 @@ class TestGlucoseMonitor(unittest.TestCase):
             with self.subTest(latest_value):
                 monitor = GlucoseMonitor(
                     injected_data=[
-                        {"timestamp": "2026-09-17T12:00:00", "value": 27.8},
-                        {"timestamp": "2026-09-17T12:01:00", "value": latest_value}
+                        {"timestamp": "2026-09-17T12:00:00", "value": latest_value},
+                        {"timestamp": "2026-09-17T12:01:00", "value": latest_value},
+                        {"timestamp": "2026-09-17T12:02:00", "value": latest_value}
                     ],
                     injected_alerts=[
                         {"level":"EMERGENCY", "type": "ALERT"},
@@ -151,8 +152,9 @@ class TestGlucoseMonitor(unittest.TestCase):
             with self.subTest(latest_value):
                 monitor = GlucoseMonitor(
                     injected_data=[
-                        {"timestamp": "2026-09-17T12:00:00", "value": 27.8},
-                        {"timestamp": "2026-09-17T12:01:00", "value": latest_value}
+                        {"timestamp": "2026-09-17T12:00:00", "value": latest_value},
+                        {"timestamp": "2026-09-17T12:01:00", "value": latest_value},
+                        {"timestamp": "2026-09-17T12:02:00", "value": latest_value}
                     ],
                     injected_alerts=[
                         {"level":"WARNING", "type": "ALERT"},
@@ -161,6 +163,35 @@ class TestGlucoseMonitor(unittest.TestCase):
                 alert = monitor.should_send_alert()
                 self.assertEqual(alert["level"], expected_alert_level)
                 self.assertEqual(alert["type"], expected_alert_type)
+
+    def test_should_not_send_recovery_without_three_consecutive_values(self):
+        """Recovery alerts should be suppressed if fewer than 3 recent values are above the threshold."""
+        # Only 2 data points
+        monitor = GlucoseMonitor(
+            injected_data=[
+                {"timestamp": "2026-09-17T12:00:00", "value": 11.0},
+                {"timestamp": "2026-09-17T12:01:00", "value": 11.0}
+            ],
+            injected_alerts=[
+                {"level":"WARNING", "type": "ALERT"}
+            ])
+        alert = monitor.should_send_alert()
+        self.assertEqual(alert, None)
+
+    def test_should_not_send_recovery_if_recent_value_below_threshold(self):
+        """Recovery should be suppressed if any of the last 3 values is below the last alert level's threshold."""
+        monitor = GlucoseMonitor(
+            injected_data=[
+                {"timestamp": "2026-09-17T12:00:00", "value": 11.0},
+                {"timestamp": "2026-09-17T12:01:00", "value": 7.0},
+                {"timestamp": "2026-09-17T12:02:00", "value": 11.0}
+            ],
+            injected_alerts=[
+                {"level":"WARNING", "type": "ALERT"}
+            ])
+        alert = monitor.should_send_alert()
+        self.assertEqual(alert, None)
+
     def test_should_send_alert_no_change(self):
         param_list = [
             (9.0, AlertLevel.LOW),

@@ -16,7 +16,9 @@ Run tests and type checks: `bash ./run-tests-and-lint.sh`
 
 ### Details
 - This script returns early if it has been run in the last 50 seconds, as a lazy guard against exceeding the API's rate limit, which appears to be around 1 request per minute
-- 
+- There are four alert levels: Target, Low, Warning, and Emergency.
+  - An alert is sent whenever a data point falls below a new threshold, as compared against the last alert
+  - A recovery alerts is sent after receiving three consecutive values above the last alert's threshold
 
 ### TODO
 
@@ -28,7 +30,7 @@ Required:
 - Send an hourly heartbeat email
 
 Nice to have (high priority):
-- Don't send recovery alert until multiple consecutive data points are above the threshold
+- (no items at the moment)
 
 Nice to have (low priority):
 
