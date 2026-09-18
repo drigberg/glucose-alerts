@@ -26,12 +26,12 @@ Required:
 - Send an hourly heartbeat email
 
 Nice to have (high priority):
-- (no items at the moment)
+- Daily summary with graph of the day's data
+- Graph of last few hours of data
 
 Nice to have (low priority):
 - Only store latest 100 values, to avoid taking longer and longer to read and write data file
   - OR: write to multiple files, one per day!
 - Only fetch every 5 minutes when latest value is above 20 (return early)
 - Pictures of Chips for each level
-- Graph of last few hours of data
 - Get and store "retry-after" from response on 429
