@@ -9,7 +9,7 @@ class EmailClient:
     def __init__(self, sender):
         self.sender = sender
 
-    def send(self, recipients, subject, body):
+    def send(self, recipients, subject, body_text, body_html=None):
         print("Region:", os.getenv("AWS_REGION"))
         ses = boto3.client(
             "ses",
@@ -17,6 +17,15 @@ class EmailClient:
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
             aws_account_id=os.getenv("AWS_ACCOUNT_ID"))
+        body = {
+            "Text": {
+                "Data": body_text,
+            }
+        }
+        if body_html:
+            body["Html"] = {
+                "Data": body_html,
+            }
         response = ses.send_email(
             Source=self.sender,
             Destination={
@@ -26,11 +35,7 @@ class EmailClient:
                 "Subject": {
                     "Data": subject,
                 },
-                "Body": {
-                    "Text": {
-                        "Data": body,
-                    }
-                },
+                "Body": body,
             },
         )
         print("Sent!!!!", response)

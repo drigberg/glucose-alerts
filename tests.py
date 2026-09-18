@@ -252,7 +252,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         self.assertEqual(todays[0]["level"], "TARGET")
         self.assertEqual(todays[1]["level"], "GOOD")
 
-    def test_format_email_body_contains_key_info(self):
+    def test_format_email_body_text_contains_key_info(self):
         from datetime import datetime
         today = datetime.now().isoformat()
         monitor = GlucoseMonitor(
@@ -263,26 +263,26 @@ class TestGlucoseMonitor(unittest.TestCase):
                 {"level": "WARNING", "type": "ALERT", "timestamp": today},
             ])
         alert = {"level": AlertLevel.EMERGENCY, "type": "ALERT"}
-        body = monitor.format_email_body(alert)
+        body = monitor.format_email_body_text(alert)
         self.assertIn("4.5", body)
         self.assertIn("ALERT", body)
         self.assertIn("EMERGENCY", body)
         self.assertIn("dangerously low", body)
         self.assertIn("Recent alerts today", body)
 
-    def test_format_email_body_recovery(self):
+    def test_format_email_body_text_recovery(self):
         monitor = GlucoseMonitor(
             injected_data=[
                 {"timestamp": "2026-09-17T12:01:00", "value": 12.0}
             ],
             injected_alerts=[])
         alert = {"level": AlertLevel.GOOD, "type": "RECOVERY"}
-        body = monitor.format_email_body(alert)
+        body = monitor.format_email_body_text(alert)
         self.assertIn("12.0", body)
         self.assertIn("RECOVERY", body)
         self.assertIn("out of his target range, but still in a good place", body)
 
-    def test_format_email_body_no_todays_alerts(self):
+    def test_format_email_body_text_no_todays_alerts(self):
         monitor = GlucoseMonitor(
             injected_data=[
                 {"timestamp": "2026-09-17T12:01:00", "value": 7.0}
@@ -291,10 +291,10 @@ class TestGlucoseMonitor(unittest.TestCase):
                 {"level": "WARNING", "type": "ALERT", "timestamp": "2025-01-01T12:00:00"},
             ])
         alert = {"level": AlertLevel.WARNING, "type": "ALERT"}
-        body = monitor.format_email_body(alert)
+        body = monitor.format_email_body_text(alert)
         self.assertNotIn("Recent alerts today", body)
 
-    def test_format_email_body_limits_to_five_alerts(self):
+    def test_format_email_body_text_limits_to_five_alerts(self):
         from datetime import datetime
         today = datetime.now().isoformat()
         monitor = GlucoseMonitor(
@@ -311,9 +311,62 @@ class TestGlucoseMonitor(unittest.TestCase):
                 {"level": "EMERGENCY", "type": "ALERT", "timestamp": today},
             ])
         alert = {"level": AlertLevel.EMERGENCY, "type": "ALERT"}
-        body = monitor.format_email_body(alert)
+        body = monitor.format_email_body_text(alert)
         alert_lines = [l for l in body.split("\n") if l.strip().startswith("—", 6)]
         self.assertEqual(len(alert_lines), 5)
+
+    def test_format_email_body_html_contains_key_info(self):
+        from datetime import datetime
+        today = datetime.now().isoformat()
+        monitor = GlucoseMonitor(
+            injected_data=[
+                {"timestamp": "2026-09-17T12:01:00", "value": 4.5}
+            ],
+            injected_alerts=[
+                {"level": "WARNING", "type": "ALERT", "timestamp": today},
+            ])
+        alert = {"level": AlertLevel.EMERGENCY, "type": "ALERT"}
+        html = monitor.format_email_body_html(alert)
+        self.assertIn("4.5", html)
+        self.assertIn("EMERGENCY", html)
+        self.assertIn("dangerously low", html)
+        self.assertIn("<!DOCTYPE html>", html)
+        self.assertIn("Recent Alerts Today", html)
+        self.assertIn("WARNING (ALERT)", html)
+
+    def test_format_email_body_html_recovery(self):
+        monitor = GlucoseMonitor(
+            injected_data=[
+                {"timestamp": "2026-09-17T12:01:00", "value": 12.0}
+            ],
+            injected_alerts=[])
+        alert = {"level": AlertLevel.GOOD, "type": "RECOVERY"}
+        html = monitor.format_email_body_html(alert)
+        self.assertIn("12.0", html)
+        self.assertIn("Recovery", html)
+        self.assertIn("#2e7d32", html)
+
+    def test_format_email_body_html_no_todays_alerts(self):
+        monitor = GlucoseMonitor(
+            injected_data=[
+                {"timestamp": "2026-09-17T12:01:00", "value": 7.0}
+            ],
+            injected_alerts=[
+                {"level": "WARNING", "type": "ALERT", "timestamp": "2025-01-01T12:00:00"},
+            ])
+        alert = {"level": AlertLevel.WARNING, "type": "ALERT"}
+        html = monitor.format_email_body_html(alert)
+        self.assertNotIn("Recent Alerts Today", html)
+
+    def test_format_email_body_html_alert_uses_red(self):
+        monitor = GlucoseMonitor(
+            injected_data=[
+                {"timestamp": "2026-09-17T12:01:00", "value": 4.5}
+            ],
+            injected_alerts=[])
+        alert = {"level": AlertLevel.EMERGENCY, "type": "ALERT"}
+        html = monitor.format_email_body_html(alert)
+        self.assertIn("#c62828", html)
 
 if __name__ == '__main__':
     unittest.main()

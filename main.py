@@ -132,7 +132,6 @@ class GlucoseMonitor:
         latest_alert_type = self.latest_alert["type"]
         current_alert_level = self.get_current_alert_level()
 
-        print(self.latest_alert)
         log(f"Latest alert: {latest_alert_level.name} ({latest_alert_type}) at {self.latest_alert["timestamp"]}")
         log(f"Current alert level: {current_alert_level.name if current_alert_level is not None else 'None'}")
         
@@ -180,12 +179,12 @@ class GlucoseMonitor:
         today = datetime.now().date()
         return [a for a in self.alerts if datetime.fromisoformat(a["timestamp"]).date() == today]
 
-    def format_email_body(self, alert: dict) -> str:
+    def format_email_body_text(self, alert: dict) -> str:
         value = self.latest_stored_value["value"]
         level_name = alert["level"].name
         alert_type = alert["type"]
 
-        type_description = "⬆️ RECOVERY" if alert_type == "RECOVERY" else "⬇️ ALERT"
+        type_description = "RECOVERY" if alert_type == "RECOVERY" else "ALERT"
         lines = [
             f"Current reading: {value} mmol/L",
             f"Status: {type_description} — {level_name}",
@@ -203,6 +202,60 @@ class GlucoseMonitor:
 
         return "\n".join(lines)
 
+    def format_email_body_html(self, alert: dict) -> str:
+        value = self.latest_stored_value["value"]
+        level_name = alert["level"].name
+        alert_type = alert["type"]
+
+        emoji = "⬆️" if alert_type == "RECOVERY" else "⬇️"
+        status_color = "#2e7d32" if alert_type == "RECOVERY" else "#c62828"
+        advice = self.get_advice(alert)
+
+        alerts_html = ""
+        todays_alerts = self.get_todays_alerts()[-5:]
+        if todays_alerts:
+            rows = ""
+            for a in todays_alerts:
+                timestamp = datetime.fromisoformat(a["timestamp"]).strftime("%H:%M")
+                row_color = "#2e7d32" if a["type"] == "RECOVERY" else "#c62828"
+                rows += f'<tr><td style="padding:4px 12px 4px 0;color:#555;">{timestamp}</td><td style="padding:4px 0;color:{row_color};font-weight:600;">{a["level"]} ({a["type"]})</td></tr>'
+            alerts_html = f"""
+            <tr><td style="padding:24px 32px 16px;">
+                <p style="margin:0 0 8px;font-size:13px;color:#888;text-transform:uppercase;letter-spacing:1px;">Recent Alerts Today</p>
+                <table style="font-size:14px;">{rows}</table>
+            </td></tr>"""
+
+        return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:24px 0;">
+<tr><td align="center">
+<table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <tr><td style="background:{status_color};padding:24px 32px;">
+        <h1 style="margin:0;color:#ffffff;font-size:22px;">{emoji} Chips Glucose {alert_type.title()}</h1>
+    </td></tr>
+    <tr><td style="padding:24px 32px;">
+        <table style="width:100%;font-size:15px;">
+            <tr>
+                <td style="padding:8px 0;color:#555;">Current Reading</td>
+                <td style="padding:8px 0;text-align:right;font-size:28px;font-weight:700;color:#222;">{value} <span style="font-size:14px;color:#888;">mmol/L</span></td>
+            </tr>
+            <tr>
+                <td style="padding:8px 0;color:#555;">Level</td>
+                <td style="padding:8px 0;text-align:right;font-weight:600;color:{status_color};">{level_name}</td>
+            </tr>
+        </table>
+    </td></tr>
+    <tr><td style="padding:0 32px 24px;">
+        <p style="margin:0;padding:16px;background:#f8f9fa;border-radius:6px;font-size:14px;line-height:1.5;color:#333;">{advice}</p>
+    </td></tr>{alerts_html}
+    <tr><td style="padding:16px 32px;border-top:1px solid #eee;">
+        <p style="margin:0;font-size:11px;color:#aaa;text-align:center;">Chips Glucose Alerts</p>
+    </td></tr>
+</table>
+</td></tr></table>
+</body></html>"""
+
     def send_alert(self, alert: dict):
         log(f"Sending alert {alert["level"].name}-{alert["type"]}")
 
@@ -210,7 +263,8 @@ class GlucoseMonitor:
         self.email_client.send(
             recipients=[os.getenv("EMAIL_SENDER")],
             subject=self.format_email_subject(alert),
-            body=self.format_email_body(alert))
+            body_text=self.format_email_body_text(alert),
+            body_html=self.format_email_body_html(alert))
 
         self.alerts.append({ 
             "timestamp": datetime.now().isoformat(),
