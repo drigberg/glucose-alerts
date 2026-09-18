@@ -1,12 +1,13 @@
 import json
 import os
 import typing
-from pylibrelinkup import PyLibreLinkUp, GraphResponse
-from dotenv import load_dotenv
-from datetime import datetime
-from enum import Enum
 import uuid
+from datetime import datetime
+from dotenv import load_dotenv
 from email_client import EmailClient
+from enum import Enum
+
+from pylibrelinkup import PyLibreLinkUp
 
 MIN_SECONDS_SINCE_LAST_DATA_FOR_FETCH = 50.0
 
@@ -37,6 +38,8 @@ class GlucoseMonitor:
         self.alerts = injected_alerts if injected_alerts is not None else self.load_alerts()
 
     def load_alerts(self):
+        # TODO: create data directory if does not exist
+        # TODO: if no data, default to []
         with open('data/alerts.json') as f:
             return json.load(f)
     
@@ -45,6 +48,8 @@ class GlucoseMonitor:
             json.dump(self.alerts, f)
 
     def load_data(self):
+        # TODO: create data directory if does not exist
+        # TODO: if no data, default to []
         with open('data/glucose-data.json') as f:
             return json.load(f)
     
@@ -73,17 +78,23 @@ class GlucoseMonitor:
         log("Fetching and parsing data...")
 
         response_json = self.libre_client._get_graph_data_json(uuid.UUID("01a00a94-f06c-742d-b3ce-631da9d29cc1"))
-        parsed = GraphResponse.model_validate(response_json)
-        current = parsed.current
-        if self.data[-1]["timestamp"] == current.timestamp.isoformat():
+
+        try:
+            glucose_measurement = response_json["data"]["connection"]["glucoseMeasurement"]
+        except Exception as e:
+            log("Error parsing response!")
+            print("Response:", response_json)
+            raise e
+
+        timestamp_iso = datetime.strptime(glucose_measurement["Timestamp"], "%m/%d/%Y %I:%M:%S %p").isoformat()
+        if self.data[-1]["timestamp"] == timestamp_iso:
             log("No new data since last fetch")
             return None
 
-        # We only use GraphResponse.current because GraphResponse.graph_data contains smoothed
-        # data with 5-minute granularity.
+        # We only use the current reading because the graph_data contains smoothed values with 5-minute granularity.
         self.data.append({
-            "timestamp": parsed.current.timestamp.isoformat(),
-            "value": current.value
+            "timestamp": timestamp_iso,
+            "value": glucose_measurement["Value"]
         })
         self.save_data()
         return self.data[-1]
@@ -119,7 +130,7 @@ class GlucoseMonitor:
         self.email_client.send(
             recipients=[os.getenv("EMAIL_SENDER")],
             subject="Chips Glucose Alert!",
-            body=f"Level: {alert["level"].name}, type: {alert["type"]}")
+            body=f"Value: {self.data[-1]["value"]}\nLevel: {alert["level"].name}\nType: {alert["type"]}")
 
         self.alerts.append({ 
             "timestamp": datetime.now().isoformat(),
@@ -138,7 +149,6 @@ def main():
         return
 
     monitor.authenticate()
-
     latest_value = monitor.fetch_latest_value()
     if latest_value is None:
         return
@@ -146,7 +156,6 @@ def main():
     log(f"Latest value: {latest_value["value"]} at {latest_value["timestamp"]}")
 
     alert = monitor.should_send_alert()
-
     if alert is None:
         return
 

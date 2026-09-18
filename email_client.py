@@ -1,6 +1,7 @@
 import boto3
-from dotenv import load_dotenv
 import os
+
+from dotenv import load_dotenv
 
 class EmailClient:
     sender: str
