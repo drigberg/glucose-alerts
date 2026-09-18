@@ -22,7 +22,7 @@ class TestGlucoseMonitor(unittest.TestCase):
                     ],
                     injected_alerts=[])
                 self.assertEqual(monitor.get_current_alert_level(), expected_alert_level)
-    def test_should_send_standard_alert_no_history(self):
+    def test_should_send_alert_no_history(self):
         param_list = [
             (9.0, AlertLevel.SOFT, "ALERT"),
             (7.0, AlertLevel.WARNING, "ALERT"),
@@ -39,8 +39,24 @@ class TestGlucoseMonitor(unittest.TestCase):
                 alert = monitor.should_send_alert()
                 self.assertEqual(alert["level"], expected_alert_level)
                 self.assertEqual(alert["type"], expected_alert_type)
+    def test_should_not_send_alert_no_history(self):
+        param_list = [
+            (10.1),
+            (11.0),
+            (20.0),
+        ]
+        for latest_value in param_list:
+            with self.subTest(latest_value):
+                monitor = GlucoseMonitor(
+                    injected_data=[
+                        {"timestamp": "2026-09-17T12:00:00", "value": 100.0},
+                        {"timestamp": "2026-09-17T12:01:00", "value": latest_value}
+                    ],
+                    injected_alerts=[])
+                alert = monitor.should_send_alert()
+                self.assertEqual(alert, None)
 
-    def test_should_send_standard_alert_after_none_recovery(self):
+    def test_should_send_alert_after_none_recovery(self):
         param_list = [
             (9.0, AlertLevel.SOFT, "ALERT"),
             (7.0, AlertLevel.WARNING, "ALERT"),
@@ -61,9 +77,8 @@ class TestGlucoseMonitor(unittest.TestCase):
                 self.assertEqual(alert["level"], expected_alert_level)
                 self.assertEqual(alert["type"], expected_alert_type)
 
-    def test_should_send_standard_alert_after_soft_recovery(self):
+    def test_should_send_alert_after_soft_recovery(self):
         param_list = [
-            (9.0, AlertLevel.SOFT, "ALERT"),
             (7.0, AlertLevel.WARNING, "ALERT"),
             (5.0, AlertLevel.EMERGENCY, "ALERT"),
         ]
@@ -71,7 +86,6 @@ class TestGlucoseMonitor(unittest.TestCase):
             with self.subTest(latest_value):
                 monitor = GlucoseMonitor(
                     injected_data=[
-                        {"timestamp": "2026-09-17T12:00:00", "value": 100.0},
                         {"timestamp": "2026-09-17T12:01:00", "value": latest_value}
                     ],
                     injected_alerts=[
@@ -82,9 +96,8 @@ class TestGlucoseMonitor(unittest.TestCase):
                 self.assertEqual(alert["level"], expected_alert_level)
                 self.assertEqual(alert["type"], expected_alert_type)
 
-    def test_should_send_standard_alert_after_warning_recovery(self):
+    def test_should_send_alert_after_warning_recovery(self):
         param_list = [
-            (7.0, AlertLevel.WARNING, "ALERT"),
             (5.0, AlertLevel.EMERGENCY, "ALERT"),
         ]
         for latest_value, expected_alert_level, expected_alert_type in param_list:
@@ -102,7 +115,7 @@ class TestGlucoseMonitor(unittest.TestCase):
                 self.assertEqual(alert["level"], expected_alert_level)
                 self.assertEqual(alert["type"], expected_alert_type)
 
-    def test_should_send_standard_recovery_after_warning_recovery(self):
+    def test_should_send_recovery_after_warning_recovery(self):
         param_list = [
             (11.0, AlertLevel.NONE, "RECOVERY"),
             (9.0, AlertLevel.SOFT, "RECOVERY"),
@@ -121,7 +134,7 @@ class TestGlucoseMonitor(unittest.TestCase):
                 alert = monitor.should_send_alert()
                 self.assertEqual(alert["level"], expected_alert_level)
                 self.assertEqual(alert["type"], expected_alert_type)
-    def test_should_send_standard_recovery_after_soft_recovery(self):
+    def test_should_send_recovery_after_soft_recovery(self):
         param_list = [
             (11.0, AlertLevel.NONE, "RECOVERY"),
         ]
@@ -139,5 +152,25 @@ class TestGlucoseMonitor(unittest.TestCase):
                 alert = monitor.should_send_alert()
                 self.assertEqual(alert["level"], expected_alert_level)
                 self.assertEqual(alert["type"], expected_alert_type)
+    def test_should_send_alert_no_change(self):
+        param_list = [
+            (9.0, AlertLevel.SOFT),
+            (6.0, AlertLevel.WARNING),
+            (4.0, AlertLevel.EMERGENCY),
+        ]
+        for latest_value, alert_level in param_list:
+            with self.subTest(latest_value):
+                monitor = GlucoseMonitor(
+                    injected_data=[
+                        {"timestamp": "2026-09-17T12:00:00", "value": 100.0},
+                        {"timestamp": "2026-09-17T12:01:00", "value": latest_value}
+                    ],
+                    injected_alerts=[
+                        {"level":"WARNING", "type": "ALERT"},
+                        {"level": alert_level.name, "type": "ALERT"}
+                    ])
+                alert = monitor.should_send_alert()
+                self.assertEqual(alert, None)
+
 if __name__ == '__main__':
     unittest.main()

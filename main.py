@@ -7,6 +7,10 @@ from datetime import datetime
 from enum import Enum
 import uuid
 
+SOFT_THRESHOLD = 10.0
+WARNING_THRESHOLD = 7.5
+EMERGENCY_THRESHOLD = 5.0
+
 class AlertLevel(Enum):
     NONE = 3
     SOFT = 2
@@ -16,10 +20,6 @@ class AlertLevel(Enum):
 def log(message: str):
     print(f"[glucose-alerts] [{datetime.now().isoformat()}] - {message}")
 
-SOFT_THRESHOLD = 10.0
-WARNING_THRESHOLD = 7.5
-EMERGENCY_THRESHOLD = 5.0
-
 class GlucoseMonitor:
     client: PyLibreLinkUp
     data: typing.Any
@@ -28,8 +28,8 @@ class GlucoseMonitor:
     def __init__(self, injected_data, injected_alerts):
         load_dotenv()
         self.client = PyLibreLinkUp(email=os.getenv("USERNAME"), password=os.getenv("PASSWORD"))
-        self.data = injected_data or self.load_data()
-        self.alerts = injected_alerts or self.load_alerts()
+        self.data = injected_data if injected_data is not None else self.load_data()
+        self.alerts = injected_alerts if injected_alerts is not None else self.load_alerts()
 
     def load_alerts(self):
         with open('data/alerts.json') as f:
@@ -91,21 +91,18 @@ class GlucoseMonitor:
         return AlertLevel.NONE
 
     def should_send_alert(self) -> typing.Optional[dict]:
-        latest_alert = self.alerts[-1]
+        latest_alert = self.alerts[-1] if len(self.alerts) > 0 else {"type":"RECOVERY", "level":"NONE"}
         latest_alert_level = AlertLevel[latest_alert["level"]]
         latest_alert_type = latest_alert["type"]
         current_alert_level = self.get_current_alert_level()
 
         if current_alert_level == latest_alert_level:
-            if latest_alert_type == "ALERT":
-                # Still same alert level
-                return None
-            # Regression after recovery
-            return {"level": current_alert_level, "type": "ALERT"}
+            # No change -- do nothing, regardless of last alert's type
+            return None
         if current_alert_level.value > latest_alert_level.value:
-            # Standard recovery
+            # Recovery
             return {"level": current_alert_level, "type": "RECOVERY"}
-        # Standard alert
+        # Alert
         return {"level": current_alert_level, "type": "ALERT"}
 
 
