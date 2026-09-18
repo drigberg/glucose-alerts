@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 from enum import Enum
 import uuid
+from email_client import EmailClient
 
 MIN_SECONDS_SINCE_LAST_DATA_FOR_FETCH = 50.0
 
@@ -23,13 +24,15 @@ def log(message: str):
     print(f"[glucose-alerts] [{datetime.now().isoformat()}] - {message}")
 
 class GlucoseMonitor:
-    client: PyLibreLinkUp
+    email_client: EmailClient
+    libre_client: PyLibreLinkUp
     data: typing.Any
     alerts: typing.Any
 
     def __init__(self, injected_data=None, injected_alerts=None):
         load_dotenv()
-        self.client = PyLibreLinkUp(email=os.getenv("USERNAME"), password=os.getenv("PASSWORD"))
+        self.email_client = EmailClient(sender=os.getenv("EMAIL_SENDER"))
+        self.libre_client = PyLibreLinkUp(email=os.getenv("LIBRE_USERNAME"), password=os.getenv("LIBRE_PASSWORD"))
         self.data = injected_data if injected_data is not None else self.load_data()
         self.alerts = injected_alerts if injected_alerts is not None else self.load_alerts()
 
@@ -51,7 +54,7 @@ class GlucoseMonitor:
 
     def authenticate(self):
         log("Authenticating...")
-        self.client.authenticate()
+        self.libre_client.authenticate()
     
     def get_seconds_since_latest_stored_value(self):
         latest_stored_value = self.data[-1] if len(self.data) > 0 else { "timestamp":"2026-01-01T12:00:00", "value":20.0 }
@@ -69,7 +72,7 @@ class GlucoseMonitor:
     def fetch_latest_value(self) -> typing.Optional[dict]:
         log("Fetching and parsing data...")
 
-        response_json = self.client._get_graph_data_json(uuid.UUID("01a00a94-f06c-742d-b3ce-631da9d29cc1"))
+        response_json = self.libre_client._get_graph_data_json(uuid.UUID("01a00a94-f06c-742d-b3ce-631da9d29cc1"))
         parsed = GraphResponse.model_validate(response_json)
         current = parsed.current
         if self.data[-1]["timestamp"] == current.timestamp.isoformat():
@@ -111,6 +114,13 @@ class GlucoseMonitor:
 
     def send_alert(self, alert: dict):
         log(f"Sending alert {alert["level"].name}-{alert["type"]}")
+
+        # Send from sender to sender for now
+        self.email_client.send(
+            recipients=[os.getenv("EMAIL_SENDER")],
+            subject="Chips Glucose Alert!",
+            body=f"Level: {alert["level"].name}, type: {alert["type"]}")
+
         self.alerts.append({ 
             "timestamp": datetime.now().isoformat(),
             "level": alert["level"].name,

@@ -11,7 +11,7 @@
 
 ### Development
 
-Saving depencies: `python3 -m pip freeze > requirements.txt`
+Saving dependencies: `python3 -m pip freeze > requirements.txt`
 Run tests and type checks: `bash ./run-tests-and-lint.sh`
 
 ### Design

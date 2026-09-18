@@ -1,0 +1,40 @@
+import boto3
+from dotenv import load_dotenv
+import os
+
+class EmailClient:
+    sender: str
+
+    def __init__(self, sender):
+        self.sender = sender
+
+    def send(self, recipients, subject, body):
+        print("Region:", os.getenv("AWS_REGION"))
+        ses = boto3.client(
+            "ses",
+            region_name=os.getenv("AWS_REGION"),
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+            aws_account_id=os.getenv("AWS_ACCOUNT_ID"))
+        response = ses.send_email(
+            Source=self.sender,
+            Destination={
+                "ToAddresses": recipients
+            },
+            Message={
+                "Subject": {
+                    "Data": subject,
+                },
+                "Body": {
+                    "Text": {
+                        "Data": body,
+                    }
+                },
+            },
+        )
+        print("Sent!!!!", response)
+
+if __name__ == "__main__":
+    load_dotenv()
+    email_client = EmailClient(os.getenv("EMAIL_SENDER"))
+    email_client.send(["daniel.rigberg@gmail.com"], "Hello", "Peril")
