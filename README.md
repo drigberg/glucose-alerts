@@ -12,26 +12,25 @@
 ### Development
 
 Saving depencies: `python3 -m pip freeze > requirements.txt`
-Running tests: `python3 -m unittest`
-Type-checking: `mypy .`
+Run tests and type checks: `bash ./run-tests-and-lint.sh`
 
 ### Design
 
 Requirements:
 
-- Run every minute
-  - Get "retry-after" from response on 429
-- Send a Whatsapp message to a group when:
-  - Glucose is below soft threshold
-    - And the last alert was at least six hours ago
-  - Glucose is below hard threshold
-    - And the last hard alert was at least one hour ago
-  - Glucose recovers from hard threshold
-    - And the last recovery message was before the last hard warning
+- Doesn't allow running twice within a minute
+- Send a Whatsapp message to the group when:
+  - Entering or exiting a stage
+- Send an SMS to on-call folks when:
+  - Entering or exiting warning or emergency stages
 - Send an email to group when:
   - Whatsapp connection fails
   - Libreview connection fails
   - Hourly heartbeat
+
+Nice to have:
+
+- Get "retry-after" from response on 429
 
 ### Example
 

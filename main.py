@@ -7,6 +7,8 @@ from datetime import datetime
 from enum import Enum
 import uuid
 
+MIN_SECONDS_SINCE_LAST_DATA_FOR_FETCH = 50.0
+
 SOFT_THRESHOLD = 10.0
 WARNING_THRESHOLD = 7.5
 EMERGENCY_THRESHOLD = 5.0
@@ -25,7 +27,7 @@ class GlucoseMonitor:
     data: typing.Any
     alerts: typing.Any
 
-    def __init__(self, injected_data, injected_alerts):
+    def __init__(self, injected_data=None, injected_alerts=None):
         load_dotenv()
         self.client = PyLibreLinkUp(email=os.getenv("USERNAME"), password=os.getenv("PASSWORD"))
         self.data = injected_data if injected_data is not None else self.load_data()
@@ -44,7 +46,7 @@ class GlucoseMonitor:
             return json.load(f)
     
     def save_data(self):
-        with open('data/data.json', 'w') as f:
+        with open('data/glucose-data.json', 'w') as f:
             json.dump(self.data, f)
 
     def authenticate(self):
@@ -52,16 +54,19 @@ class GlucoseMonitor:
         self.client.authenticate()
     
     def get_seconds_since_latest_stored_value(self):
-        latest_stored_value = self.data[-1]
+        latest_stored_value = self.data[-1] if len(self.data) > 0 else { "timestamp":"2026-01-01T12:00:00", "value":20.0 }
         latest_datetime = datetime.fromisoformat(latest_stored_value["timestamp"]) 
         return (datetime.now() - latest_datetime).total_seconds()
 
-    def fetch_latest_value(self) -> typing.Optional[dict]:
-        seconds_since_last_stored_value = self.get_seconds_since_latest_stored_value()
-        if seconds_since_last_stored_value < 60.0:
-            log(f"Last ran {seconds_since_last_stored_value} seconds ago -- try again in {60 - seconds_since_last_stored_value} seconds")
-            return None
+    def should_wait(self):
+        seconds_since_last = round(self.get_seconds_since_latest_stored_value())
+        if seconds_since_last < MIN_SECONDS_SINCE_LAST_DATA_FOR_FETCH:
+            wait_until = round(MIN_SECONDS_SINCE_LAST_DATA_FOR_FETCH - seconds_since_last)
+            log(f"Last ran {seconds_since_last} seconds ago -- try again in {wait_until} seconds")
+            return True
+        return False
 
+    def fetch_latest_value(self) -> typing.Optional[dict]:
         log("Fetching and parsing data...")
 
         response_json = self.client._get_graph_data_json(uuid.UUID("01a00a94-f06c-742d-b3ce-631da9d29cc1"))
@@ -71,7 +76,6 @@ class GlucoseMonitor:
             log("No new data since last fetch")
             return None
 
-        print(self.data[-1]["timestamp"], current.timestamp.isoformat())
         # We only use GraphResponse.current because GraphResponse.graph_data contains smoothed
         # data with 5-minute granularity.
         self.data.append({
@@ -105,19 +109,38 @@ class GlucoseMonitor:
         # Alert
         return {"level": current_alert_level, "type": "ALERT"}
 
-
+    def send_alert(self, alert: dict):
+        log(f"Sending alert {alert["level"].name}-{alert["type"]}")
+        self.alerts.append({ 
+            "timestamp": datetime.now().isoformat(),
+            "level": alert["level"].name,
+            "type": alert["type"],
+        })
+        self.save_alerts()
     
 def main():
     log("Running script!")
 
     monitor = GlucoseMonitor()
+
+    should_wait = monitor.should_wait()
+    if should_wait:
+        return
+
     monitor.authenticate()
 
     latest_value = monitor.fetch_latest_value()
     if latest_value is None:
         return
-
+    
     log(f"Latest value: {latest_value["value"]} at {latest_value["timestamp"]}")
+
+    alert = monitor.should_send_alert()
+
+    if alert is None:
+        return
+
+    monitor.send_alert(alert)
 
 
 if __name__ == "__main__":
