@@ -38,20 +38,26 @@ class GlucoseMonitor:
         self.alerts = injected_alerts if injected_alerts is not None else self.load_alerts()
 
     def load_alerts(self):
-        # TODO: create data directory if does not exist
-        # TODO: if no data, default to []
-        with open('data/alerts.json') as f:
-            return json.load(f)
+        os.makedirs('data', exist_ok=True)
+        try:
+            with open('data/alerts.json') as f:
+                content = f.read().strip()
+                return json.loads(content) if content else []
+        except FileNotFoundError:
+            return []
     
     def save_alerts(self):
         with open('data/alerts.json', 'w') as f:
             json.dump(self.alerts, f)
 
     def load_data(self):
-        # TODO: create data directory if does not exist
-        # TODO: if no data, default to []
-        with open('data/glucose-data.json') as f:
-            return json.load(f)
+        os.makedirs('data', exist_ok=True)
+        try:
+            with open('data/glucose-data.json') as f:
+                content = f.read().strip()
+                return json.loads(content) if content else []
+        except FileNotFoundError:
+            return []
     
     def save_data(self):
         with open('data/glucose-data.json', 'w') as f:
@@ -61,9 +67,16 @@ class GlucoseMonitor:
         log("Authenticating...")
         self.libre_client.authenticate()
     
+    @property
+    def latest_stored_value(self):
+        return self.data[-1] if len(self.data) > 0 else { "timestamp":"2026-01-01T12:00:00", "value":27.8 }
+
+    @property
+    def latest_alert(self):
+        return self.alerts[-1] if len(self.alerts) > 0 else {"type":"RECOVERY", "level":"NONE"}
+
     def get_seconds_since_latest_stored_value(self):
-        latest_stored_value = self.data[-1] if len(self.data) > 0 else { "timestamp":"2026-01-01T12:00:00", "value":20.0 }
-        latest_datetime = datetime.fromisoformat(latest_stored_value["timestamp"]) 
+        latest_datetime = datetime.fromisoformat(self.latest_stored_value["timestamp"]) 
         return (datetime.now() - latest_datetime).total_seconds()
 
     def should_wait(self):
@@ -87,7 +100,7 @@ class GlucoseMonitor:
             raise e
 
         timestamp_iso = datetime.strptime(glucose_measurement["Timestamp"], "%m/%d/%Y %I:%M:%S %p").isoformat()
-        if self.data[-1]["timestamp"] == timestamp_iso:
+        if self.latest_stored_value["timestamp"] == timestamp_iso:
             log("No new data since last fetch")
             return None
 
@@ -97,21 +110,21 @@ class GlucoseMonitor:
             "value": glucose_measurement["Value"]
         })
         self.save_data()
-        return self.data[-1]
+        return self.latest_stored_value
     
     def get_current_alert_level(self) -> AlertLevel:
-        if self.data[-1]["value"] <= EMERGENCY_THRESHOLD:
+        if self.latest_stored_value["value"] <= EMERGENCY_THRESHOLD:
             return AlertLevel.EMERGENCY
-        if self.data[-1]["value"] <= WARNING_THRESHOLD:
+        if self.latest_stored_value["value"] <= WARNING_THRESHOLD:
             return AlertLevel.WARNING
-        if self.data[-1]["value"] <= SOFT_THRESHOLD:
+        if self.latest_stored_value["value"] <= SOFT_THRESHOLD:
             return AlertLevel.SOFT
         return AlertLevel.NONE
 
+    
     def should_send_alert(self) -> typing.Optional[dict]:
-        latest_alert = self.alerts[-1] if len(self.alerts) > 0 else {"type":"RECOVERY", "level":"NONE"}
-        latest_alert_level = AlertLevel[latest_alert["level"]]
-        latest_alert_type = latest_alert["type"]
+        latest_alert_level = AlertLevel[self.latest_alert["level"]]
+        latest_alert_type = self.latest_alert["type"]
         current_alert_level = self.get_current_alert_level()
 
         if current_alert_level == latest_alert_level:
@@ -130,7 +143,7 @@ class GlucoseMonitor:
         self.email_client.send(
             recipients=[os.getenv("EMAIL_SENDER")],
             subject="Chips Glucose Alert!",
-            body=f"Value: {self.data[-1]["value"]}\nLevel: {alert["level"].name}\nType: {alert["type"]}")
+            body=f"Value: {self.latest_stored_value["value"]}\nLevel: {alert["level"].name}\nType: {alert["type"]}")
 
         self.alerts.append({ 
             "timestamp": datetime.now().isoformat(),

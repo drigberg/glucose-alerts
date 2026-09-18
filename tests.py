@@ -2,6 +2,12 @@ import unittest
 from main import GlucoseMonitor, AlertLevel
 
 class TestGlucoseMonitor(unittest.TestCase):
+    def test_get_current_alert_level_no_history(self):
+        monitor = GlucoseMonitor(
+            injected_data=[],
+            injected_alerts=[])
+        self.assertEqual(monitor.get_current_alert_level(), AlertLevel.NONE)
+
     def test_get_current_alert_level(self):
         param_list = [
             (20.0, AlertLevel.NONE),
