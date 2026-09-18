@@ -81,7 +81,7 @@ class GlucoseMonitor:
         self.save_data()
         return self.data[-1]
     
-    def get_alert_level(self) -> AlertLevel:
+    def get_current_alert_level(self) -> AlertLevel:
         if self.data[-1]["value"] <= EMERGENCY_THRESHOLD:
             return AlertLevel.EMERGENCY
         if self.data[-1]["value"] <= WARNING_THRESHOLD:
@@ -90,9 +90,24 @@ class GlucoseMonitor:
             return AlertLevel.SOFT
         return AlertLevel.NONE
 
-    def send_alert(self):
-        if self.is_glucose_below_emergency_threshold:
-            return 
+    def should_send_alert(self) -> typing.Optional[dict]:
+        latest_alert = self.alerts[-1]
+        latest_alert_level = AlertLevel[latest_alert["level"]]
+        latest_alert_type = latest_alert["type"]
+        current_alert_level = self.get_current_alert_level()
+
+        if current_alert_level == latest_alert_level:
+            if latest_alert_type == "ALERT":
+                # Still same alert level
+                return None
+            # Regression after recovery
+            return {"level": current_alert_level, "type": "ALERT"}
+        if current_alert_level.value < latest_alert_level.value:
+            # Standard recovery
+            return {"level": current_alert_level, "type": "RECOVERY"}
+        # Standard alert
+        return {"level": current_alert_level, "type": "ALERT"}
+
 
     
 def main():
