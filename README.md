@@ -14,24 +14,27 @@
 Saving dependencies: `python3 -m pip freeze > requirements.txt`
 Run tests and type checks: `bash ./run-tests-and-lint.sh`
 
-### Design
+### Details
+- This script returns early if it has been run in the last 50 seconds, as a lazy guard against exceeding the API's rate limit, which appears to be around 1 request per minute
+- 
 
-Requirements:
+### TODO
 
-- Doesn't allow running twice within a minute
-- Send a Whatsapp message to the group when:
-  - Entering or exiting a stage
-- Send an SMS to on-call folks when:
-  - Entering or exiting warning or emergency stages
-- Send an email to group when:
-  - Whatsapp connection fails
-  - Libreview connection fails
-  - Hourly heartbeat
+Required:
+- Connect to Whatsapp
+- Nicer alert messages
+- Send SMS to on-call recipients when entering or existing warning/emergency levels
+- Send an email to admins on any unexpected error (especially Whatsapp/Libreview connection errors)
+- Send an hourly heartbeat email
 
-Nice to have:
+Nice to have (high priority):
+- Don't send recovery alert until multiple consecutive data points are above the threshold
 
-- Get "retry-after" from response on 429
+Nice to have (low priority):
 
-### Example
-
-https://pylibrelinkup.readthedocs.io/en/latest/usage.html
+- Only store latest 100 values, to avoid taking longer and longer to read and write data file
+  - OR: write to multiple files, one per day!
+- Only fetch every 5 minutes when latest value is above 20 (return early)
+- Pictures of Chips for each level
+- Graph of last few hours of data
+- Get and store "retry-after" from response on 429
