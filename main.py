@@ -6,6 +6,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from email_client import EmailClient
 from enum import Enum
+from string import Template
 
 from pylibrelinkup import PyLibreLinkUp
 
@@ -23,6 +24,12 @@ ALERT_LEVEL_THRESHOLDS = {
     AlertLevel.WARNING: 7.5,
     AlertLevel.EMERGENCY: 5.0,
 }
+
+TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+
+def load_template(name: str) -> Template:
+    with open(os.path.join(TEMPLATES_DIR, name)) as f:
+        return Template(f.read())
 
 def log(message: str):
     print(f"[glucose-alerts] [{datetime.now().isoformat()}] - {message}")
@@ -214,47 +221,25 @@ class GlucoseMonitor:
         alerts_html = ""
         todays_alerts = self.get_todays_alerts()[-5:]
         if todays_alerts:
+            row_template = load_template("email_alert_row.template")
             rows = ""
             for a in todays_alerts:
                 timestamp = datetime.fromisoformat(a["timestamp"]).strftime("%H:%M")
                 row_color = "#2e7d32" if a["type"] == "RECOVERY" else "#c62828"
-                rows += f'<tr><td style="padding:4px 12px 4px 0;color:#555;">{timestamp}</td><td style="padding:4px 0;color:{row_color};font-weight:600;">{a["level"]} ({a["type"]})</td></tr>'
-            alerts_html = f"""
-            <tr><td style="padding:24px 32px 16px;">
-                <p style="margin:0 0 8px;font-size:13px;color:#888;text-transform:uppercase;letter-spacing:1px;">Recent Alerts Today</p>
-                <table style="font-size:14px;">{rows}</table>
-            </td></tr>"""
+                rows += row_template.substitute(timestamp=timestamp, row_color=row_color, level=a["level"], type=a["type"])
+            section_template = load_template("email_alerts_section.template")
+            alerts_html = section_template.substitute(rows=rows)
 
-        return f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:24px 0;">
-<tr><td align="center">
-<table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-    <tr><td style="background:{status_color};padding:24px 32px;">
-        <h1 style="margin:0;color:#ffffff;font-size:22px;">{emoji} Chips Glucose {alert_type.title()}</h1>
-    </td></tr>
-    <tr><td style="padding:24px 32px;">
-        <table style="width:100%;font-size:15px;">
-            <tr>
-                <td style="padding:8px 0;color:#555;">Current Reading</td>
-                <td style="padding:8px 0;text-align:right;font-size:28px;font-weight:700;color:#222;">{value} <span style="font-size:14px;color:#888;">mmol/L</span></td>
-            </tr>
-            <tr>
-                <td style="padding:8px 0;color:#555;">Level</td>
-                <td style="padding:8px 0;text-align:right;font-weight:600;color:{status_color};">{level_name}</td>
-            </tr>
-        </table>
-    </td></tr>
-    <tr><td style="padding:0 32px 24px;">
-        <p style="margin:0;padding:16px;background:#f8f9fa;border-radius:6px;font-size:14px;line-height:1.5;color:#333;">{advice}</p>
-    </td></tr>{alerts_html}
-    <tr><td style="padding:16px 32px;border-top:1px solid #eee;">
-        <p style="margin:0;font-size:11px;color:#aaa;text-align:center;">Chips Glucose Alerts</p>
-    </td></tr>
-</table>
-</td></tr></table>
-</body></html>"""
+        body_template = load_template("email_body.template")
+        return body_template.substitute(
+            status_color=status_color,
+            emoji=emoji,
+            alert_type_title=alert_type.title(),
+            value=value,
+            level_name=level_name,
+            advice=advice,
+            alerts_html=alerts_html,
+        )
 
     def send_alert(self, alert: dict):
         log(f"Sending alert {alert["level"].name}-{alert["type"]}")

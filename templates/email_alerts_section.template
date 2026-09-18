@@ -1,0 +1,5 @@
+
+            <tr><td style="padding:24px 32px 16px;">
+                <p style="margin:0 0 8px;font-size:13px;color:#888;text-transform:uppercase;letter-spacing:1px;">Recent Alerts Today</p>
+                <table style="font-size:14px;">${rows}</table>
+            </td></tr>

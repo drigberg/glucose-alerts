@@ -1,0 +1,1 @@
+<tr><td style="padding:4px 12px 4px 0;color:#555;">${timestamp}</td><td style="padding:4px 0;color:${row_color};font-weight:600;">${level} (${type})</td></tr>

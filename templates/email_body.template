@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:24px 0;">
+<tr><td align="center">
+<table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <tr><td style="background:${status_color};padding:24px 32px;">
+        <h1 style="margin:0;color:#ffffff;font-size:22px;">${emoji} Chips Glucose ${alert_type_title}</h1>
+    </td></tr>
+    <tr><td style="padding:24px 32px;">
+        <table style="width:100%;font-size:15px;">
+            <tr>
+                <td style="padding:8px 0;color:#555;">Current Reading</td>
+                <td style="padding:8px 0;text-align:right;font-size:28px;font-weight:700;color:#222;">${value} <span style="font-size:14px;color:#888;">mmol/L</span></td>
+            </tr>
+            <tr>
+                <td style="padding:8px 0;color:#555;">Level</td>
+                <td style="padding:8px 0;text-align:right;font-weight:600;color:${status_color};">${level_name}</td>
+            </tr>
+        </table>
+    </td></tr>
+    <tr><td style="padding:0 32px 24px;">
+        <p style="margin:0;padding:16px;background:#f8f9fa;border-radius:6px;font-size:14px;line-height:1.5;color:#333;">${advice}</p>
+    </td></tr>${alerts_html}
+    <tr><td style="padding:16px 32px;border-top:1px solid #eee;">
+        <p style="margin:0;font-size:11px;color:#aaa;text-align:center;">Chips Glucose Alerts</p>
+    </td></tr>
+</table>
+</td></tr></table>
+</body></html>
