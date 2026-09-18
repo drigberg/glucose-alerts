@@ -2,17 +2,12 @@
 
 ### Running the script locally
 
-1. Set up the virtual environment: `python3 -m venv .venv`
-2. Activate the virtual environment: `source .venv/bin/activate`
-3. Ensure that pip is up to date: `python3 -m pip install --upgrade pip`
-4. Install all dependencies: `python3 -m pip install -r requirements.txt`
-5. Create a `.env` file in this repo, matching the syntax of `.env.example`
-6. Start the Signal server: `bash start_signal_server.sh`
-7. Run the script: `python3 main.py`
+1. Create a `.env` file in this repo, matching the syntax of `.env.example`
+2. Generate a QR code to link your Signal device: `bash ./generate-signal-qr-code.sh`
+3. Run the script: `docker compose run --rm glucose-alerts python main.py`
 
 ### Development
 
-Saving dependencies: `python3 -m pip freeze > requirements.txt`
 Run tests and type checks: `bash ./run-tests-and-lint.sh`
 
 ### Details

@@ -10,7 +10,6 @@ class EmailClient:
         self.sender = sender
 
     def send(self, recipients, subject, body_text, body_html=None):
-        print("Region:", os.getenv("AWS_REGION"))
         ses = boto3.client(
             "ses",
             region_name=os.getenv("AWS_REGION"),
@@ -38,7 +37,7 @@ class EmailClient:
                 "Body": body,
             },
         )
-        print("Sent!!!!", response)
+        return response
 
 if __name__ == "__main__":
     load_dotenv()

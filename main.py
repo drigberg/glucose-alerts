@@ -11,7 +11,7 @@ from enum import Enum
 from signal_client import SignalClient
 from string import Template
 
-import playwright
+from playwright.sync_api import sync_playwright
 from pylibrelinkup import PyLibreLinkUp
 
 MIN_SECONDS_SINCE_LAST_DATA_FOR_FETCH = 50.0
@@ -46,7 +46,7 @@ def load_template(name: str) -> Template:
         return Template(f.read())
 
 def log(message: str):
-    print(f"[glucose-alerts] [{datetime.now().isoformat()}] - {message}")
+    print(f"[glucose-alerts] [{datetime.now().isoformat(timespec='milliseconds')}] - {message}")
 
 @dataclass
 class Config:
@@ -55,7 +55,7 @@ class Config:
     email_sender: str
     signal_api_url: str
     signal_sender: str
-    signal_group_id: str
+    signal_recipient: str
     force_send_test: bool
 
 class GlucoseMonitor:
@@ -71,7 +71,7 @@ class GlucoseMonitor:
         self.signal_client = SignalClient(
             api_url=config.signal_api_url,
             sender=config.signal_sender,
-            group_id=config.signal_group_id,
+            recipient=config.signal_recipient,
         )
         self.libre_client = PyLibreLinkUp(email=config.libre_username, password=config.libre_password)
         self.data = injected_data if injected_data is not None else self.load_data()
@@ -140,7 +140,7 @@ class GlucoseMonitor:
             print("Response:", response_json)
             raise e
 
-        timestamp_iso = datetime.strptime(glucose_measurement["Timestamp"], "%m/%d/%Y %I:%M:%S %p").isoformat()
+        timestamp_iso = datetime.strptime(glucose_measurement["FactoryTimestamp"], "%m/%d/%Y %I:%M:%S %p").isoformat()
         if self.latest_stored_value["timestamp"] == timestamp_iso:
             log("No new data since last fetch")
             return None
@@ -286,7 +286,6 @@ class GlucoseMonitor:
         return f"{emoji} Chips Glucose {alert_type.title()}\n\nReading: {value} mmol/L — {level_name}\n\n{advice}"
 
     def render_html_to_image(self, html: str) -> bytes:
-        from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(viewport={"width": 520, "height": 1})
@@ -304,6 +303,7 @@ class GlucoseMonitor:
                 subject=self.format_email_subject(alert),
                 body_text=self.format_email_body_text(alert),
                 body_html=self.format_email_body_html(alert))
+            log(f"Successfully sent email!")
         except Exception as e:
             log(f"Error sending email!")
             print("Error:", e)
@@ -313,10 +313,13 @@ class GlucoseMonitor:
             png_bytes = self.render_html_to_image(html)
             png_b64 = base64.b64encode(png_bytes).decode("ascii")
             attachment = f"data:image/png;base64,{png_b64}"
+
+            log(f"Sending Signal message... (attachment size: {len(png_bytes)} bytes)")
             self.signal_client.send(
                 self.format_signal_message(alert),
                 base64_attachments=[attachment],
             )
+            log(f"Successfully sent Signal message!")
         except Exception as e:
             log(f"Error sending Signal message: {e}")
 
@@ -336,7 +339,7 @@ def main():
         email_sender=os.getenv("EMAIL_SENDER", ""),
         signal_api_url=os.getenv("SIGNAL_API_URL", ""),
         signal_sender=os.getenv("SIGNAL_SENDER", ""),
-        signal_group_id=os.getenv("SIGNAL_GROUP_ID", ""),
+        signal_recipient=os.getenv("SIGNAL_RECIPIENT", ""),
         libre_username=os.getenv("LIBRE_USERNAME", ""),
         libre_password=os.getenv("LIBRE_PASSWORD", ""),
         force_send_test=(os.getenv("FORCE_SEND_TEST") == "true"))

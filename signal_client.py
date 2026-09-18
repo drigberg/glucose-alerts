@@ -7,18 +7,18 @@ from dotenv import load_dotenv
 class SignalClient:
     api_url: str
     sender: str
-    group_id: str
+    recipient: str
 
-    def __init__(self, api_url: str, sender: str, group_id: str):
+    def __init__(self, api_url: str, sender: str, recipient: str):
         self.api_url = api_url.rstrip("/")
         self.sender = sender
-        self.group_id = group_id
+        self.recipient = recipient
 
     def send(self, message: str, base64_attachments: list[str] | None = None):
         payload = {
             "message": message,
             "number": self.sender,
-            "recipients": [self.group_id],
+            "recipients": [self.recipient],
         }
         if base64_attachments:
             payload["base64_attachments"] = base64_attachments
