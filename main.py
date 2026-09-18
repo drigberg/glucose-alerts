@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import typing
@@ -10,6 +11,7 @@ from enum import Enum
 from signal_client import SignalClient
 from string import Template
 
+import playwright
 from pylibrelinkup import PyLibreLinkUp
 
 MIN_SECONDS_SINCE_LAST_DATA_FOR_FETCH = 50.0
@@ -283,6 +285,16 @@ class GlucoseMonitor:
         advice = self.get_advice(alert)
         return f"{emoji} Chips Glucose {alert_type.title()}\n\nReading: {value} mmol/L — {level_name}\n\n{advice}"
 
+    def render_html_to_image(self, html: str) -> bytes:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={"width": 520, "height": 1})
+            page.set_content(html, wait_until="networkidle")
+            png_bytes = page.screenshot(full_page=True)
+            browser.close()
+        return png_bytes
+
     def send_alert(self, alert: dict):
         log(f"Sending alert {alert["level"].name}-{alert["type"]}")
 
@@ -297,7 +309,14 @@ class GlucoseMonitor:
             print("Error:", e)
 
         try:
-            self.signal_client.send(self.format_signal_message(alert))
+            html = self.format_email_body_html(alert)
+            png_bytes = self.render_html_to_image(html)
+            png_b64 = base64.b64encode(png_bytes).decode("ascii")
+            attachment = f"data:image/png;base64,{png_b64}"
+            self.signal_client.send(
+                self.format_signal_message(alert),
+                base64_attachments=[attachment],
+            )
         except Exception as e:
             log(f"Error sending Signal message: {e}")
 

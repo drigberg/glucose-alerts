@@ -3,3 +3,4 @@
 data/
 __pycache__/
 .mypy_cache/
+signal-qr.png

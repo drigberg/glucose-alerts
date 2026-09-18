@@ -1,0 +1,23 @@
+services:
+  signal-api:
+    image: bbernhard/signal-cli-rest-api
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - signal-data:/home/.local/share/signal-cli
+    environment:
+      - MODE=native
+
+  glucose-alerts:
+    build: .
+    env_file: .env
+    volumes:
+      - .:/app
+    depends_on:
+      - signal-api
+    environment:
+      - SIGNAL_API_URL=http://signal-api:8080
+
+volumes:
+  signal-data:
