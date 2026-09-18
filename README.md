@@ -20,13 +20,12 @@ Run tests and type checks: `bash ./run-tests-and-lint.sh`
 - There are four alert levels: Target, Low, Warning, and Emergency.
   - An alert is sent whenever a data point falls below a new threshold, as compared against the last alert
   - A recovery alerts is sent after receiving three consecutive values above the last alert's threshold
+- Sends alerts to one email address and one Signal group
 
 ### TODO
 
 Required:
-- Connect to Whatsapp
-- Nicer alert messages
-- Send SMS to on-call recipients when entering or existing warning/emergency levels
+- Two groups: one for all alerts, and one for only emergency/warning alerts
 - Send an email to admins on any unexpected error (especially Whatsapp/Libreview connection errors)
 - Send an hourly heartbeat email
 
@@ -34,7 +33,6 @@ Nice to have (high priority):
 - (no items at the moment)
 
 Nice to have (low priority):
-
 - Only store latest 100 values, to avoid taking longer and longer to read and write data file
   - OR: write to multiple files, one per day!
 - Only fetch every 5 minutes when latest value is above 20 (return early)
