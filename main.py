@@ -279,7 +279,7 @@ class GlucoseMonitor:
         value = self.latest_stored_value["value"]
         level_name = alert["level"].name
         alert_type = alert["type"]
-        emoji = "⬆️" if alert_type == "RECOVERY" else "⬇️"
+        emoji = "⬆️" if alert_type == "RECOVERY" else "🌈" if level_name == AlertLevel.TEST.name else "⬇️"
         advice = self.get_advice(alert)
         return f"{emoji} Chips Glucose {alert_type.title()}\n\nReading: {value} mmol/L — {level_name}\n\n{advice}"
 
