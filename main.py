@@ -18,7 +18,8 @@ from pylibrelinkup import PyLibreLinkUp
 MIN_SECONDS_SINCE_LAST_DATA_FOR_FETCH = 50.0
 
 class AlertLevel(Enum):
-    TEST = 4
+    TEST = 5
+    SILENT = 4
     GOOD = 3
     TARGET = 2
     WARNING = 1
@@ -26,6 +27,7 @@ class AlertLevel(Enum):
 
 ALERT_LEVEL_COLORS = {
     AlertLevel.TEST: "#8e24aa",
+    AlertLevel.SILENT: "#8e24aa",
     AlertLevel.GOOD: "#039be5",
     AlertLevel.TARGET: "#43a047",
     AlertLevel.WARNING: "#f9a825",
@@ -34,6 +36,7 @@ ALERT_LEVEL_COLORS = {
 
 ALERT_LEVEL_THRESHOLDS = {
     AlertLevel.TEST: 100.0,
+    AlertLevel.SILENT: 27.8,
     AlertLevel.GOOD: 15.0,
     AlertLevel.TARGET: 10.0,
     AlertLevel.WARNING: 7.5,
@@ -115,7 +118,7 @@ class GlucoseMonitor:
 
     @property
     def latest_alert(self):
-        return self.alerts[-1] if len(self.alerts) > 0 else {"timestamp":"2026-01-01T12:00:00", "type":"RECOVERY", "level":"GOOD",}
+        return self.alerts[-1] if len(self.alerts) > 0 else {"timestamp":"2026-01-01T12:00:00", "type":"RECOVERY", "level":"SILENT",}
 
     def get_seconds_since_latest_stored_value(self):
         latest_datetime = datetime.fromisoformat(self.latest_stored_value["timestamp"]) 
@@ -163,6 +166,8 @@ class GlucoseMonitor:
             return AlertLevel.TARGET
         if self.latest_stored_value["value"] <= ALERT_LEVEL_THRESHOLDS[AlertLevel.GOOD]:
             return AlertLevel.GOOD
+        if self.latest_stored_value["value"] <= ALERT_LEVEL_THRESHOLDS[AlertLevel.SILENT]:
+            return AlertLevel.SILENT
         return None
 
     
@@ -296,41 +301,44 @@ class GlucoseMonitor:
         return png_bytes
 
     def send_alert(self, alert: dict):
-        log(f"Sending alert {alert["level"].name}-{alert["type"]}")
+        if alert["level"] != AlertLevel.SILENT:
+            log(f"Sending alert {alert["level"].name}-{alert["type"]}")
 
-        try:
-            self.email_client.send(
-                recipients=[os.getenv("EMAIL_SENDER")],
-                subject=self.format_email_subject(alert),
-                body_text=self.format_email_body_text(alert),
-                body_html=self.format_email_body_html(alert))
-            log(f"Successfully sent email!")
-        except Exception as e:
-            log(f"Error sending email!")
-            template = "Error type: {0}\n Arguments:\n{1!r}"
-            message = template.format(type(e).__name__, e.args)
-            print(message)
-            print(traceback.format_exc())
+            try:
+                self.email_client.send(
+                    recipients=[os.getenv("EMAIL_SENDER")],
+                    subject=self.format_email_subject(alert),
+                    body_text=self.format_email_body_text(alert),
+                    body_html=self.format_email_body_html(alert))
+                log(f"Successfully sent email!")
+            except Exception as e:
+                log(f"Error sending email!")
+                template = "Error type: {0}\n Arguments:\n{1!r}"
+                message = template.format(type(e).__name__, e.args)
+                print(message)
+                print(traceback.format_exc())
 
-        try:
-            html = self.format_email_body_html(alert)
-            png_bytes = self.render_html_to_image(html)
-            png_b64 = base64.b64encode(png_bytes).decode("ascii")
-            attachment = f"data:image/png;base64,{png_b64}"
+            try:
+                html = self.format_email_body_html(alert)
+                png_bytes = self.render_html_to_image(html)
+                png_b64 = base64.b64encode(png_bytes).decode("ascii")
+                attachment = f"data:image/png;base64,{png_b64}"
 
-            log(f"Sending Signal message... (attachment size: {len(png_bytes)} bytes)")
-            self.signal_client.send(
-                self.format_signal_message(alert),
-                base64_attachments=[attachment],
-            )
-            log(f"Successfully sent Signal message!")
-        except Exception as e:
-            log(f"Error sending Signal message!")
-            print("Error:", e)
-            message = template.format(type(e).__name__, e.args)
-            print(message)
-            print(traceback.format_exc())
+                log(f"Sending Signal message... (attachment size: {len(png_bytes)} bytes)")
+                self.signal_client.send(
+                    self.format_signal_message(alert),
+                    base64_attachments=[attachment],
+                )
+                log(f"Successfully sent Signal message!")
+            except Exception as e:
+                log(f"Error sending Signal message!")
+                print("Error:", e)
+                message = template.format(type(e).__name__, e.args)
+                print(message)
+                print(traceback.format_exc())
 
+        # Only TEST alerts are unsaved! SILENT recoveries need to be saved so that we can send a GOOD alert
+        # when his glucose drops again.
         if alert["level"] != AlertLevel.TEST:
             self.alerts.append({ 
                 "timestamp": datetime.now().isoformat(),

@@ -1,0 +1,1 @@
+while true; do bash ./scripts/run-main.sh; sleep 60; done

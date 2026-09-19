@@ -14,17 +14,19 @@ test_config = Config(
 
 class TestGlucoseMonitor(unittest.TestCase):
     def test_get_current_alert_level_no_history(self):
+        """With no data, the default value (27.8) is at the SILENT threshold."""
         monitor = GlucoseMonitor(
             config=test_config,
             injected_data=[],
             injected_alerts=[])
-        self.assertEqual(monitor.get_current_alert_level(), None)
+        self.assertEqual(monitor.get_current_alert_level(), AlertLevel.SILENT)
 
     def test_get_current_alert_level(self):
         param_list = [
-            (27.8, None),
-            (20.0, None),
-            (15.1, None),
+            (27.9, None),
+            (27.8, AlertLevel.SILENT),
+            (20.0, AlertLevel.SILENT),
+            (15.1, AlertLevel.SILENT),
             (15.0, AlertLevel.GOOD),
             (10.1, AlertLevel.GOOD),
             (10.0, AlertLevel.TARGET),
@@ -67,6 +69,7 @@ class TestGlucoseMonitor(unittest.TestCase):
             (15.1),
             (20.0),
             (27.8),
+            (27.9),
         ]
         for latest_value in param_list:
             with self.subTest(latest_value):
@@ -216,6 +219,7 @@ class TestGlucoseMonitor(unittest.TestCase):
 
     def test_should_send_alert_no_change(self):
         param_list = [
+            (16.0, AlertLevel.SILENT),
             (9.0, AlertLevel.TARGET),
             (6.0, AlertLevel.WARNING),
             (4.0, AlertLevel.EMERGENCY),
@@ -234,6 +238,38 @@ class TestGlucoseMonitor(unittest.TestCase):
                     ])
                 alert = monitor.should_send_alert()
                 self.assertEqual(alert, None)
+
+    def test_silent_recovery(self):
+        """SILENT level should produce a RECOVERY alert (saved but not sent)."""
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": "2026-09-17T12:00:00", "value": 16.0},
+                {"timestamp": "2026-09-17T12:01:00", "value": 16.0},
+                {"timestamp": "2026-09-17T12:02:00", "value": 16.0}
+            ],
+            injected_alerts=[
+                {"timestamp": "2026-09-17T11:00:00", "level": "TARGET", "type": "ALERT"},
+            ])
+        alert = monitor.should_send_alert()
+        self.assertEqual(alert["level"], AlertLevel.SILENT)
+        self.assertEqual(alert["type"], "RECOVERY")
+
+    def test_should_send_alert_after_silent_recovery(self):
+        """After a SILENT recovery, a drop back to GOOD should send an alert."""
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": "2026-09-17T12:00:00", "value": 27.8},
+                {"timestamp": "2026-09-17T12:01:00", "value": 12.0}
+            ],
+            injected_alerts=[
+                {"timestamp": "2026-09-17T11:00:00", "level": "TARGET", "type": "ALERT"},
+                {"timestamp": "2026-09-17T11:30:00", "level": "SILENT", "type": "RECOVERY"}
+            ])
+        alert = monitor.should_send_alert()
+        self.assertEqual(alert["level"], AlertLevel.GOOD)
+        self.assertEqual(alert["type"], "ALERT")
 
     def test_get_advice_alert(self):
         cases = [
