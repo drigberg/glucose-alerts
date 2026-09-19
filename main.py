@@ -43,6 +43,16 @@ ALERT_LEVEL_THRESHOLDS = {
     AlertLevel.EMERGENCY: 5.0,
 }
 
+# TODO: implement missing-data alerts
+MISSING_DATA_TRESHOLD_MINS = {
+    AlertLevel.TEST: 120,
+    AlertLevel.SILENT: 60,
+    AlertLevel.GOOD: 30,
+    AlertLevel.TARGET: 25,
+    AlertLevel.WARNING: 10,
+    AlertLevel.EMERGENCY: 5.0,
+}
+
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 
 def load_template(name: str) -> Template:

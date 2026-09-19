@@ -24,6 +24,7 @@ Required:
 - Two groups: one for all alerts, and one for only emergency/warning alerts
 - Send an email to admins on any unexpected error (especially Whatsapp/Libreview connection errors)
 - Send an hourly heartbeat email
+- Missing-data alerts
 
 Nice to have (high priority):
 - Daily summary with graph of the day's data
