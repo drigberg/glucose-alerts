@@ -4,12 +4,10 @@ services:
   signal-api:
     image: bbernhard/signal-cli-rest-api
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:8080"
     volumes:
       - signal-data:/home/.local/share/signal-cli
     environment:
-      - MODE=native
+      MODE: native
     logging:
       driver: local
       options:
@@ -17,20 +15,17 @@ services:
         max-file: "5"
 
   glucose-alerts:
-    image: glucose-alerts:dev
-    build: .
-    pull_policy: build
+    image: ghcr.io/drigberg/glucose-alerts:latest
     command: ["bash", "./scripts/run-every-minute.sh"]
     init: true
     restart: unless-stopped
-    env_file: .env
+    env_file: ../.env
     volumes:
-      - .:/app
       - glucose-data:/app/data
     depends_on:
       - signal-api
     environment:
-      - SIGNAL_API_URL=http://signal-api:8080
+      SIGNAL_API_URL: http://signal-api:8080
     logging:
       driver: local
       options:

@@ -1,14 +1,51 @@
-### General setup
+## General setup
 
 ### Running the script locally
 
 1. Create a `.env` file in this repo, matching the syntax of `.env.example`
-2. Generate a QR code to link your Signal device: `bash ./scripts/generate-signal-qr-code.sh`
-3. Run the script: `bash ./scripts/run_main.sh`
+2. Start Signal API with `docker compose up -d signal-api`, then generate a QR
+   code to link your Signal device: `bash ./scripts/generate-signal-qr-code.sh`
+3. Run one poll: `bash ./scripts/run-main.sh`
+
+## Proxmox deployment
+
+The production Compose setup runs the monitor continuously, polling after each
+run with a 60-second delay and terminating any poll that runs longer than two
+minutes. The monitor and Signal API use restart policies, application
+data and Signal registration live in named Docker volumes, and Docker rotates
+each service's logs. The Signal API is reachable only on the private Compose
+network; it does not publish its control port on the host.
+
+GitHub Actions runs the existing unit tests and type checks for pull requests
+and pushes to `main`. A successful push to `main` publishes a container image
+to GitHub Container Registry. On the Docker host, install the files under
+`deploy/systemd/` and enable the included timer to pull and start the latest
+published image every five minutes. See [the deployment guide](deploy/README.md)
+for the one-time host setup.
+
+The image package must be public for the host to pull it without a GitHub
+credential. The repository owner may need to change the package visibility
+after the first image is published.
+
+Logs are retained locally on the Docker host with a bounded history. They can
+include the latest glucose value and timestamp, raw LibreLinkUp responses on
+parse errors, and Signal API error bodies. There is no remote log shipping in
+this setup. Anyone with Docker or Proxmox administrator access can read them.
+
+Missing-data alerts are still listed as a TODO in this project. Keep the
+official CGM alert path active; this service cannot report that polling itself
+has stopped.
 
 ### Development
 
-Run tests and type checks: `bash ./scripts/run-tests-and-lint.sh`
+The root `docker-compose.yml` is for development: it bind-mounts the working
+tree into the container so source edits are visible without rebuilding. The
+Signal API is available on the Docker host at `127.0.0.1:8080` only. Rebuild
+when changing dependencies or the base image with `docker compose up -d --build`.
+Production uses `deploy/compose.yml`, which runs the tested GHCR image without a
+source bind mount or published Signal API port.
+
+Run tests and type checks: `bash ./scripts/test-and-lint.sh`
 
 ### Details
 - This script returns early if it has been run in the last 50 seconds, as a lazy guard against exceeding the API's rate limit, which appears to be around 1 request per minute

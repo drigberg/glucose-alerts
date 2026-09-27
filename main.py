@@ -381,7 +381,7 @@ def main():
     if latest_value is None:
         return
     
-    log(f"Latest value: {latest_value["value"]} at {latest_value["timestamp"]}")
+    log(f"Latest value: {latest_value['value']} at {latest_value['timestamp']}")
 
     alert = monitor.should_send_alert()
     if alert is None:

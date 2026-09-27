@@ -1,0 +1,10 @@
+[Unit]
+Description=Pull and start the latest tested glucose-alerts image
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/glucose-alerts
+ExecStart=/usr/bin/docker compose -f /opt/glucose-alerts/deploy/compose.yml pull glucose-alerts
+ExecStartPost=/usr/bin/docker compose -f /opt/glucose-alerts/deploy/compose.yml up --detach --no-build glucose-alerts
