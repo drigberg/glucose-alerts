@@ -46,10 +46,10 @@ and container logs. The timer writes update results to the systemd journal.
 - Timer status: `systemctl list-timers glucose-alerts-update.timer`
 
 Docker's `local` log driver keeps a bounded history (up to five 10 MB files per
-service). Glucose readings and raw LibreLinkUp responses are intentionally not
-written to application logs. Proxmox administrators and Docker administrators
-on this host can still access them; a local file cannot be made private from
-the administrator of the machine that stores it.
+service). Application logs can include the latest glucose value and timestamp,
+raw LibreLinkUp responses on parse errors, and Signal API error bodies. Logs
+stay on the Docker host; this setup does not ship them elsewhere. Proxmox
+administrators and Docker administrators on this host can read them.
 
 ## Rollback
 

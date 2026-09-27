@@ -28,6 +28,6 @@ class SignalClient:
             timeout=30,
         )
         if not response.ok:
-            print(f"Signal API error (HTTP {response.status_code})")
+            print(f"Signal API error {response.status_code}: {response.text}")
         response.raise_for_status()
         return response.json()

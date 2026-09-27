@@ -27,16 +27,23 @@ The image package must be public for the host to pull it without a GitHub
 credential. The repository owner may need to change the package visibility
 after the first image is published.
 
-Logs can contain service errors and timing information. The monitor avoids
-writing glucose values or raw LibreLinkUp responses to logs. Docker retains a
-bounded local log history; anyone with Docker or Proxmox administrator access
-can still read those logs.
+Logs are retained locally on the Docker host with a bounded history. They can
+include the latest glucose value and timestamp, raw LibreLinkUp responses on
+parse errors, and Signal API error bodies. There is no remote log shipping in
+this setup. Anyone with Docker or Proxmox administrator access can read them.
 
 Missing-data alerts are still listed as a TODO in this project. Keep the
 official CGM alert path active; this service cannot report that polling itself
 has stopped.
 
 ### Development
+
+The root `docker-compose.yml` is for development: it bind-mounts the working
+tree into the container so source edits are visible without rebuilding. The
+Signal API is available on the Docker host at `127.0.0.1:8080` only. Rebuild
+when changing dependencies or the base image with `docker compose up -d --build`.
+Production uses `deploy/compose.yml`, which runs the tested GHCR image without a
+source bind mount or published Signal API port.
 
 Run tests and type checks: `bash ./scripts/test-and-lint.sh`
 
