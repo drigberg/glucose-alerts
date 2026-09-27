@@ -151,7 +151,6 @@ class GlucoseMonitor:
             glucose_measurement = response_json["data"]["connection"]["glucoseMeasurement"]
         except Exception as e:
             log("Error parsing response!")
-            print("Response:", response_json)
             raise e
 
         timestamp_iso = datetime.strptime(glucose_measurement["FactoryTimestamp"], "%m/%d/%Y %I:%M:%S %p").isoformat()
@@ -381,7 +380,7 @@ def main():
     if latest_value is None:
         return
     
-    log(f"Latest value: {latest_value["value"]} at {latest_value["timestamp"]}")
+    log("New glucose measurement captured")
 
     alert = monitor.should_send_alert()
     if alert is None:

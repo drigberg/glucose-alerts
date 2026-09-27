@@ -1,4 +1,7 @@
 .env
 .git
+.venv
+.mypy_cache
 __pycache__
 data/
+signal-qr.png

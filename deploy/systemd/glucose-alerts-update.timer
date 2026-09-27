@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for a tested glucose-alerts release
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=glucose-alerts-update.service
+
+[Install]
+WantedBy=timers.target

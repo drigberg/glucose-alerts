@@ -7,7 +7,7 @@ services:
     volumes:
       - signal-data:/home/.local/share/signal-cli
     environment:
-      - MODE=native
+      MODE: native
     logging:
       driver: local
       options:
@@ -16,18 +16,16 @@ services:
 
   glucose-alerts:
     image: ghcr.io/drigberg/glucose-alerts:latest
-    build: .
-    pull_policy: build
     command: ["bash", "./scripts/run-every-minute.sh"]
     init: true
     restart: unless-stopped
-    env_file: .env
+    env_file: ../.env
     volumes:
       - glucose-data:/app/data
     depends_on:
       - signal-api
     environment:
-      - SIGNAL_API_URL=http://signal-api:8080
+      SIGNAL_API_URL: http://signal-api:8080
     logging:
       driver: local
       options:
