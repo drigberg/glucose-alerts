@@ -1,5 +1,7 @@
 FROM python:3.14-slim
 
+LABEL org.opencontainers.image.source="https://github.com/drigberg/glucose-alerts"
+
 WORKDIR /app
 
 # Install system dependencies for Playwright/Chromium
