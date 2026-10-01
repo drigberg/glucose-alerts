@@ -541,6 +541,137 @@ class TestGlucoseMonitor(unittest.TestCase):
         html = monitor.format_email_body_html(alert)
         self.assertIn("#c62828", html)
 
+    def test_format_graph_svg_not_enough_data(self):
+        """With fewer than 2 data points, a placeholder message is shown instead of a graph."""
+        monitor = GlucoseMonitor(config=test_config, injected_data=[], injected_alerts=[])
+        svg = monitor.format_graph_svg()
+        self.assertIn("<svg", svg)
+        self.assertIn("Not enough data for graph", svg)
+        self.assertNotIn("<polyline", svg)
+
+    def test_format_graph_svg_renders_polyline_for_recent_data(self):
+        """Data within the last 12 hours should be rendered as a connected polyline."""
+        now = datetime.now()
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": (now - timedelta(hours=2)).isoformat(), "value": 10.0},
+                {"timestamp": (now - timedelta(hours=1, minutes=55)).isoformat(), "value": 10.5},
+                {"timestamp": (now - timedelta(hours=1, minutes=50)).isoformat(), "value": 11.0},
+            ],
+            injected_alerts=[])
+        svg = monitor.format_graph_svg()
+        self.assertIn("<svg", svg)
+        self.assertIn("<polyline", svg)
+        # All 3 points should be part of a single unbroken segment (only 1 polyline).
+        self.assertEqual(svg.count("<polyline"), 1)
+
+    def test_format_graph_svg_excludes_data_older_than_window(self):
+        """Data older than the 12-hour window should not affect the graph."""
+        now = datetime.now()
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": (now - timedelta(hours=20)).isoformat(), "value": 2.0},
+                {"timestamp": (now - timedelta(hours=2)).isoformat(), "value": 10.0},
+                {"timestamp": (now - timedelta(hours=1)).isoformat(), "value": 11.0},
+            ],
+            injected_alerts=[])
+        recent_data = monitor.get_recent_data()
+        self.assertEqual(len(recent_data), 2)
+
+    def test_format_graph_svg_breaks_line_on_gap(self):
+        """A gap larger than the threshold between consecutive readings should split the line into
+        separate segments, representing missing data as a visual gap."""
+        now = datetime.now()
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": (now - timedelta(hours=4)).isoformat(), "value": 10.0},
+                {"timestamp": (now - timedelta(hours=3, minutes=55)).isoformat(), "value": 10.5},
+                # Large gap here (over an hour) should break the line into a new segment.
+                {"timestamp": (now - timedelta(hours=1)).isoformat(), "value": 11.0},
+                {"timestamp": (now - timedelta(minutes=55)).isoformat(), "value": 11.5},
+            ],
+            injected_alerts=[])
+        svg = monitor.format_graph_svg()
+        self.assertEqual(svg.count("<polyline"), 2)
+
+    def test_format_graph_svg_no_gap_within_threshold(self):
+        """Consecutive readings within the gap threshold should remain a single segment."""
+        now = datetime.now()
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": (now - timedelta(minutes=20)).isoformat(), "value": 10.0},
+                {"timestamp": (now - timedelta(minutes=12)).isoformat(), "value": 10.5},
+                {"timestamp": (now - timedelta(minutes=5)).isoformat(), "value": 11.0},
+            ],
+            injected_alerts=[])
+        svg = monitor.format_graph_svg()
+        self.assertEqual(svg.count("<polyline"), 1)
+
+    def test_format_graph_svg_draws_isolated_reading_as_dot(self):
+        """A reading with no neighbour within the gap threshold should still be visible, as a dot."""
+        now = datetime.now()
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": (now - timedelta(hours=3)).isoformat(), "value": 10.0},
+                {"timestamp": (now - timedelta(minutes=10)).isoformat(), "value": 11.0},
+                {"timestamp": (now - timedelta(minutes=5)).isoformat(), "value": 12.0},
+            ],
+            injected_alerts=[])
+        svg = monitor.format_graph_svg()
+        self.assertEqual(svg.count("<circle"), 1)
+        self.assertEqual(svg.count("<polyline"), 1)
+
+    def test_format_email_body_html_uses_provided_graph_html(self):
+        """Emails reference the graph as an inline cid image instead of inline SVG, which Gmail strips."""
+        now = datetime.now()
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": (now - timedelta(minutes=10)).isoformat(), "value": 10.0},
+                {"timestamp": (now - timedelta(minutes=5)).isoformat(), "value": 11.0},
+            ],
+            injected_alerts=[])
+        alert = {"level": AlertLevel.TARGET, "type": "ALERT"}
+        html = monitor.format_email_body_html(alert, graph_html='<img src="cid:glucose-graph" />')
+        self.assertIn('src="cid:glucose-graph"', html)
+        self.assertNotIn("<svg", html)
+
+    def test_build_raw_message_attaches_inline_image(self):
+        from email_client import EmailClient
+        message = EmailClient(sender="test@example.com").build_raw_message(
+            recipients=["to@example.com"],
+            subject="Subject",
+            body_text="text",
+            body_html='<img src="cid:glucose-graph" />',
+            inline_images={"glucose-graph": b"\x89PNG\r\n\x1a\nfake"})
+        self.assertEqual(message.get_content_type(), "multipart/related")
+        parts = message.get_payload()
+        self.assertEqual(parts[0].get_content_type(), "multipart/alternative")
+        self.assertEqual(parts[1].get_content_type(), "image/png")
+        self.assertEqual(parts[1]["Content-ID"], "<glucose-graph>")
+
+    def test_format_email_body_html_includes_graph(self):
+        """The rendered email HTML should include the graph SVG and its section heading."""
+        now = datetime.now()
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": (now - timedelta(minutes=10)).isoformat(), "value": 10.0},
+                {"timestamp": (now - timedelta(minutes=5)).isoformat(), "value": 11.0},
+                {"timestamp": (now - timedelta(minutes=1)).isoformat(), "value": 12.0},
+            ],
+            injected_alerts=[])
+        alert = {"level": AlertLevel.TARGET, "type": "ALERT"}
+        html = monitor.format_email_body_html(alert)
+        self.assertIn("Last 12 Hours", html)
+        self.assertIn("<svg", html)
+        self.assertIn("<polyline", html)
+
     def test_format_signal_message_alert(self):
         monitor = GlucoseMonitor(
             config=test_config,

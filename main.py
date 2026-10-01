@@ -62,6 +62,14 @@ MISSING_DATA_TRESHOLD_MINS = {
     AlertLevel.EMERGENCY: 5.0,
 }
 
+GRAPH_WINDOW_HOURS = 12
+GRAPH_WIDTH = 480
+GRAPH_HEIGHT = 160
+GRAPH_PADDING = 10
+# A gap between consecutive readings larger than this breaks the line, so missing data shows as a gap.
+GRAPH_GAP_MINUTES_THRESHOLD = 10
+GRAPH_CONTENT_ID = "glucose-graph"
+
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 
 def load_template(name: str) -> Template:
@@ -247,6 +255,73 @@ class GlucoseMonitor:
         today = datetime.now().date()
         return [a for a in self.alerts if datetime.fromisoformat(a["timestamp"]).date() == today]
 
+    def get_recent_data(self, hours: int = GRAPH_WINDOW_HOURS) -> list:
+        window_start = datetime.now() - timedelta(hours=hours)
+        return [d for d in self.data if datetime.fromisoformat(d["timestamp"]) > window_start]
+
+    def format_graph_svg(self) -> str:
+        """Renders a very basic line graph of the last GRAPH_WINDOW_HOURS of data as an inline SVG.
+        Gaps larger than GRAPH_GAP_MINUTES_THRESHOLD between consecutive readings are rendered as
+        breaks in the line, so missing data is visually represented as a gap rather than connected."""
+        recent_data = self.get_recent_data()
+
+        width = GRAPH_WIDTH
+        height = GRAPH_HEIGHT
+        padding = GRAPH_PADDING
+
+        if len(recent_data) < 2:
+            return f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg"><text x="{width/2}" y="{height/2}" text-anchor="middle" font-size="13" fill="#999">Not enough data for graph</text></svg>'
+
+        now = datetime.now()
+        window_start = now - timedelta(hours=GRAPH_WINDOW_HOURS)
+        values = [d["value"] for d in recent_data]
+        min_value = min(min(values), ALERT_LEVEL_THRESHOLDS[AlertLevel.TARGET])
+        max_value = max(max(values), ALERT_LEVEL_THRESHOLDS[AlertLevel.GOOD])
+        value_range = max_value - min_value if max_value != min_value else 1.0
+
+        def x_for(timestamp: datetime) -> float:
+            total_seconds = (now - window_start).total_seconds()
+            offset_seconds = (timestamp - window_start).total_seconds()
+            return padding + (offset_seconds / total_seconds) * (width - 2 * padding)
+
+        def y_for(value: float) -> float:
+            return height - padding - ((value - min_value) / value_range) * (height - 2 * padding)
+
+        # Split into separate line segments wherever the gap between readings is too large,
+        # so missing data appears as a visual gap instead of a connecting line.
+        segments: list[list[tuple[float, float]]] = []
+        current_segment: list[tuple[float, float]] = []
+        previous_timestamp = None
+        for d in recent_data:
+            timestamp = datetime.fromisoformat(d["timestamp"])
+            if previous_timestamp is not None:
+                gap_minutes = (timestamp - previous_timestamp).total_seconds() / 60
+                if gap_minutes > GRAPH_GAP_MINUTES_THRESHOLD:
+                    if current_segment:
+                        segments.append(current_segment)
+                    current_segment = []
+            current_segment.append((x_for(timestamp), y_for(d["value"])))
+            previous_timestamp = timestamp
+        if current_segment:
+            segments.append(current_segment)
+
+        polylines = ""
+        for segment in segments:
+            if len(segment) == 1:
+                x, y = segment[0]
+                polylines += f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2" fill="#039be5" />'
+                continue
+            points = " ".join(f"{x:.1f},{y:.1f}" for x, y in segment)
+            polylines += f'<polyline points="{points}" fill="none" stroke="#039be5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />'
+
+        return (
+            f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
+            f'xmlns="http://www.w3.org/2000/svg">'
+            f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f8f9fa" rx="6" />'
+            f'{polylines}'
+            f'</svg>'
+        )
+
     def format_email_body_text(self, alert: dict) -> str:
         value = self.latest_stored_value["value"]
         level_name = alert["level"].name
@@ -270,7 +345,7 @@ class GlucoseMonitor:
 
         return "\n".join(lines)
 
-    def format_email_body_html(self, alert: dict) -> str:
+    def format_email_body_html(self, alert: dict, graph_html: typing.Optional[str] = None) -> str:
         value = self.latest_stored_value["value"]
         level_name = alert["level"].name
         alert_type = alert["type"]
@@ -278,6 +353,8 @@ class GlucoseMonitor:
         emoji = "⬆️" if alert_type == "RECOVERY" else "⬇️"
         status_color = ALERT_LEVEL_COLORS[alert["level"]]
         advice = self.get_advice(alert)
+        if graph_html is None:
+            graph_html = self.format_graph_svg()
 
         alerts_html = ""
         todays_alerts = self.get_todays_alerts()[-5:]
@@ -299,6 +376,7 @@ class GlucoseMonitor:
             value=value,
             level_name=level_name,
             advice=advice,
+            graph_html=graph_html,
             alerts_html=alerts_html,
         )
 
@@ -319,16 +397,29 @@ class GlucoseMonitor:
             browser.close()
         return png_bytes
 
+    def render_svg_to_image(self, svg: str) -> bytes:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={"width": GRAPH_WIDTH, "height": GRAPH_HEIGHT}, device_scale_factor=2)
+            page.set_content(f'<html><body style="margin:0;">{svg}</body></html>', wait_until="networkidle")
+            png_bytes = page.locator("svg").screenshot(omit_background=True)
+            browser.close()
+        return png_bytes
+
     def send_alert(self, alert: dict):
         if alert["level"] != AlertLevel.SILENT:
             log(f"Sending alert {alert["level"].name}-{alert["type"]}")
 
             try:
+                # Gmail strips inline <svg>, so the email references the graph as an inline PNG attachment instead.
+                graph_png = self.render_svg_to_image(self.format_graph_svg())
+                graph_img = f'<img src="cid:{GRAPH_CONTENT_ID}" width="{GRAPH_WIDTH}" height="{GRAPH_HEIGHT}" alt="Glucose graph" style="display:block;max-width:100%;height:auto;" />'
                 self.email_client.send(
                     recipients=[os.getenv("EMAIL_SENDER")],
                     subject=self.format_email_subject(alert),
                     body_text=self.format_email_body_text(alert),
-                    body_html=self.format_email_body_html(alert))
+                    body_html=self.format_email_body_html(alert, graph_html=graph_img),
+                    inline_images={GRAPH_CONTENT_ID: graph_png})
                 log(f"Successfully sent email!")
             except Exception as e:
                 log(f"Error sending email!")
@@ -352,6 +443,7 @@ class GlucoseMonitor:
             except Exception as e:
                 log(f"Error sending Signal message!")
                 print("Error:", e)
+                template = "Error type: {0}\n Arguments:\n{1!r}"
                 message = template.format(type(e).__name__, e.args)
                 print(message)
                 print(traceback.format_exc())

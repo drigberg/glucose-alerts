@@ -21,6 +21,10 @@
     </td></tr>
     <tr><td style="padding:0 32px 24px;">
         <p style="margin:0;padding:16px;background:#f8f9fa;border-radius:6px;font-size:14px;line-height:1.5;color:#333;">${advice}</p>
+    </td></tr>
+    <tr><td style="padding:0 32px 24px;">
+        <p style="margin:0 0 8px;font-size:13px;color:#888;text-transform:uppercase;letter-spacing:1px;">Last 12 Hours</p>
+        ${graph_html}
     </td></tr>${alerts_html}
     <tr><td style="padding:16px 32px;border-top:1px solid #eee;">
         <p style="margin:0;font-size:11px;color:#aaa;text-align:center;">Chips Glucose Alerts</p>
