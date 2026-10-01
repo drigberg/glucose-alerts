@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import unittest
 from main import GlucoseMonitor, AlertLevel, Config
 
@@ -145,7 +146,9 @@ class TestGlucoseMonitor(unittest.TestCase):
                 self.assertEqual(alert["level"], expected_alert_level)
                 self.assertEqual(alert["type"], expected_alert_type)
 
-    def test_should_send_recovery_after_warning_recovery(self):
+    def test_should_send_recovery_after_warning_alert(self):
+        """After WARNING alert, 3+ values in the 30-minute window above WARNING threshold triggers recovery."""
+        now = datetime.now()
         param_list = [
             (11.0, AlertLevel.GOOD, "RECOVERY"),
             (9.0, AlertLevel.TARGET, "RECOVERY"),
@@ -155,64 +158,165 @@ class TestGlucoseMonitor(unittest.TestCase):
                 monitor = GlucoseMonitor(
                     config=test_config,
                     injected_data=[
-                        {"timestamp": "2026-09-17T12:00:00", "value": latest_value},
-                        {"timestamp": "2026-09-17T12:01:00", "value": latest_value},
-                        {"timestamp": "2026-09-17T12:02:00", "value": latest_value}
+                        {"timestamp": (now - timedelta(minutes=25)).isoformat(), "value": latest_value},
+                        {"timestamp": (now - timedelta(minutes=20)).isoformat(), "value": latest_value},
+                        {"timestamp": (now - timedelta(minutes=15)).isoformat(), "value": latest_value}
                     ],
                     injected_alerts=[
-                        {"timestamp": "2026-09-17T11:00:00", "level":"EMERGENCY", "type": "ALERT"},
-                        {"timestamp": "2026-09-17T11:01:00", "level":"WARNING", "type": "RECOVERY"}
+                        {"timestamp": (now - timedelta(minutes=30)).isoformat(), "level":"WARNING", "type": "ALERT"},
                     ])
                 alert = monitor.should_send_alert()
                 self.assertEqual(alert["level"], expected_alert_level)
                 self.assertEqual(alert["type"], expected_alert_type)
-    def test_should_send_recovery_after_low_recovery(self):
+
+    def test_should_send_recovery_after_emergency_alert(self):
+        """After EMERGENCY alert, 3+ values in the 3-minute window above EMERGENCY threshold triggers recovery."""
+        now = datetime.now()
         param_list = [
             (11.0, AlertLevel.GOOD, "RECOVERY"),
+            (9.0, AlertLevel.TARGET, "RECOVERY"),
+            (7.0, AlertLevel.WARNING, "RECOVERY"),  # Above EMERGENCY (5.0), at/below WARNING (7.5)
         ]
         for latest_value, expected_alert_level, expected_alert_type in param_list:
             with self.subTest(latest_value):
                 monitor = GlucoseMonitor(
                     config=test_config,
                     injected_data=[
-                        {"timestamp": "2026-09-17T12:00:00", "value": latest_value},
-                        {"timestamp": "2026-09-17T12:01:00", "value": latest_value},
-                        {"timestamp": "2026-09-17T12:02:00", "value": latest_value}
+                        {"timestamp": (now - timedelta(minutes=2, seconds=30)).isoformat(), "value": latest_value},
+                        {"timestamp": (now - timedelta(minutes=1, seconds=30)).isoformat(), "value": latest_value},
+                        {"timestamp": (now - timedelta(seconds=30)).isoformat(), "value": latest_value}
                     ],
                     injected_alerts=[
-                        {"timestamp": "2026-09-17T12:00:00", "level":"WARNING", "type": "ALERT"},
-                        {"timestamp": "2026-09-17T12:01:00", "level":"TARGET", "type": "RECOVERY"}
+                        {"timestamp": (now - timedelta(minutes=3)).isoformat(), "level":"EMERGENCY", "type": "ALERT"},
                     ])
                 alert = monitor.should_send_alert()
                 self.assertEqual(alert["level"], expected_alert_level)
                 self.assertEqual(alert["type"], expected_alert_type)
 
+    def test_should_send_recovery_after_target_alert(self):
+        now = datetime.now()
+        param_list = [
+            (11.0, AlertLevel.GOOD, "RECOVERY"),
+            (20.5, AlertLevel.SILENT, "RECOVERY"),  # Above TARGET threshold (10.0), returns GOOD
+        ]
+        for latest_value, expected_alert_level, expected_alert_type in param_list:
+            with self.subTest(latest_value):
+                monitor = GlucoseMonitor(
+                    config=test_config,
+                    injected_data=[
+                        {"timestamp": (now - timedelta(minutes=118)).isoformat(), "value": latest_value},
+                        {"timestamp": (now - timedelta(minutes=57)).isoformat(), "value": latest_value},
+                        {"timestamp": (now - timedelta(minutes=15)).isoformat(), "value": latest_value}
+                    ],
+                    injected_alerts=[
+                        {"timestamp": (now - timedelta(minutes=121)).isoformat(), "level":"TARGET", "type": "ALERT"},
+                    ])
+                alert = monitor.should_send_alert()
+                self.assertEqual(alert["level"], expected_alert_level)
+                self.assertEqual(alert["type"], expected_alert_type)
+
+    def test_should_send_recovery_after_good_recovery(self):
+        """After a GOOD recovery, further improvement (e.g., to SILENT) should trigger recovery."""
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": (now - timedelta(minutes=238)).isoformat(), "value": 20.0},
+                {"timestamp": (now - timedelta(minutes=60)).isoformat(), "value": 20.0},
+                {"timestamp": (now - timedelta(minutes=15)).isoformat(), "value": 20.0}
+            ],
+            injected_alerts=[
+                {"timestamp": (now - timedelta(minutes=300)).isoformat(), "level": "TARGET", "type": "ALERT"},
+                {"timestamp": (now - timedelta(minutes=239)).isoformat(), "level": "GOOD", "type": "RECOVERY"}
+            ])
+        alert = monitor.should_send_alert()
+        self.assertEqual(alert["level"], AlertLevel.SILENT)
+        self.assertEqual(alert["type"], "RECOVERY")
+
+    def test_should_send_recovery_after_target_recovery(self):
+        """After a TARGET recovery, further improvement (e.g., to GOOD) should trigger recovery."""
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": (now - timedelta(minutes=119)).isoformat(), "value": 12.0},
+                {"timestamp": (now - timedelta(minutes=50)).isoformat(), "value": 12.0},
+                {"timestamp": (now - timedelta(minutes=45)).isoformat(), "value": 12.0}
+            ],
+            injected_alerts=[
+                {"timestamp": (now - timedelta(minutes=121)).isoformat(), "level": "WARNING", "type": "ALERT"},
+                {"timestamp": (now - timedelta(minutes=119)).isoformat(), "level": "TARGET", "type": "RECOVERY"}
+            ])
+        alert = monitor.should_send_alert()
+        self.assertEqual(alert["level"], AlertLevel.GOOD)
+        self.assertEqual(alert["type"], "RECOVERY")
+
+    def test_should_send_recovery_after_warning_recovery(self):
+        """After a WARNING recovery, further improvement (e.g., to TARGET) should trigger recovery."""
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": (now - timedelta(minutes=25)).isoformat(), "value": 9.0},
+                {"timestamp": (now - timedelta(minutes=20)).isoformat(), "value": 9.0},
+                {"timestamp": (now - timedelta(minutes=15)).isoformat(), "value": 9.0}
+            ],
+            injected_alerts=[
+                {"timestamp": (now - timedelta(minutes=3)).isoformat(), "level": "EMERGENCY", "type": "ALERT"},
+                {"timestamp": (now - timedelta(minutes=2)).isoformat(), "level": "WARNING", "type": "RECOVERY"}
+            ])
+        alert = monitor.should_send_alert()
+        self.assertEqual(alert["level"], AlertLevel.TARGET)
+        self.assertEqual(alert["type"], "RECOVERY")
+
     def test_should_not_send_recovery_without_three_consecutive_values(self):
         """Recovery alerts should be suppressed if fewer than 3 recent values are above the threshold."""
+        now = datetime.now()
         # Only 2 data points
         monitor = GlucoseMonitor(
             config=test_config,
             injected_data=[
-                {"timestamp": "2026-09-17T12:00:00", "value": 11.0},
-                {"timestamp": "2026-09-17T12:01:00", "value": 11.0}
+                {"timestamp": (now - timedelta(minutes=2)).isoformat(), "value": 11.0},
+                {"timestamp": (now - timedelta(minutes=1)).isoformat(), "value": 11.0}
             ],
             injected_alerts=[
-                {"timestamp": "2026-09-17T12:00:00", "level":"WARNING", "type": "ALERT"}
+                {"timestamp": (now - timedelta(minutes=30)).isoformat(), "level":"WARNING", "type": "ALERT"}
             ])
         alert = monitor.should_send_alert()
         self.assertEqual(alert, None)
 
     def test_should_not_send_recovery_if_recent_value_below_threshold(self):
-        """Recovery should be suppressed if any of the last 3 values is below the last alert level's threshold."""
+        """Recovery should be suppressed if any value in the window is below the alert level's threshold."""
+        from datetime import datetime, timedelta
+        now = datetime.now()
         monitor = GlucoseMonitor(
             config=test_config,
             injected_data=[
-                {"timestamp": "2026-09-17T12:00:00", "value": 11.0},
-                {"timestamp": "2026-09-17T12:01:00", "value": 7.0},
-                {"timestamp": "2026-09-17T12:02:00", "value": 11.0}
+                {"timestamp": (now - timedelta(minutes=25)).isoformat(), "value": 11.0},
+                {"timestamp": (now - timedelta(minutes=15)).isoformat(), "value": 7.0},  # Below WARNING threshold
+                {"timestamp": (now - timedelta(minutes=5)).isoformat(), "value": 11.0}
             ],
             injected_alerts=[
-                {"timestamp": "2026-09-17T12:01:00", "level":"WARNING", "type": "ALERT"}
+                {"timestamp": (now - timedelta(minutes=30)).isoformat(), "level":"WARNING", "type": "ALERT"}
+            ])
+        alert = monitor.should_send_alert()
+        self.assertEqual(alert, None)
+
+    def test_should_not_send_recovery_if_outside_window(self):
+        """Recovery should be suppressed if all 3+ values are outside the recovery window."""
+        now = datetime.now()
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": (now - timedelta(minutes=35)).isoformat(), "value": 11.0},
+                {"timestamp": (now - timedelta(minutes=33)).isoformat(), "value": 11.0},
+                {"timestamp": (now - timedelta(minutes=31)).isoformat(), "value": 11.0}
+            ],
+            injected_alerts=[
+                {"timestamp": (now - timedelta(minutes=40)).isoformat(), "level":"WARNING", "type": "ALERT"}
             ])
         alert = monitor.should_send_alert()
         self.assertEqual(alert, None)
@@ -241,15 +345,16 @@ class TestGlucoseMonitor(unittest.TestCase):
 
     def test_silent_recovery(self):
         """SILENT level should produce a RECOVERY alert (saved but not sent)."""
+        now = datetime.now()
         monitor = GlucoseMonitor(
             config=test_config,
             injected_data=[
-                {"timestamp": "2026-09-17T12:00:00", "value": 16.0},
-                {"timestamp": "2026-09-17T12:01:00", "value": 16.0},
-                {"timestamp": "2026-09-17T12:02:00", "value": 16.0}
+                {"timestamp": (now - timedelta(minutes=55)).isoformat(), "value": 16.0},
+                {"timestamp": (now - timedelta(minutes=50)).isoformat(), "value": 16.0},
+                {"timestamp": (now - timedelta(minutes=45)).isoformat(), "value": 16.0}
             ],
             injected_alerts=[
-                {"timestamp": "2026-09-17T11:00:00", "level": "TARGET", "type": "ALERT"},
+                {"timestamp": (now - timedelta(minutes=60)).isoformat(), "level": "TARGET", "type": "ALERT"},
             ])
         alert = monitor.should_send_alert()
         self.assertEqual(alert["level"], AlertLevel.SILENT)

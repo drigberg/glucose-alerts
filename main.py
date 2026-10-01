@@ -5,7 +5,7 @@ import traceback
 import typing
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from email_client import EmailClient
 from enum import Enum
@@ -41,6 +41,15 @@ ALERT_LEVEL_THRESHOLDS = {
     AlertLevel.TARGET: 10.0,
     AlertLevel.WARNING: 7.5,
     AlertLevel.EMERGENCY: 5.0,
+}
+
+# All data in this window of recent minutes must be above the alert's value threshold in order
+# to be considered a recovery.
+RECOVERY_CONSECUTIVE_MINUTES_THRESHOLDS = {
+    AlertLevel.GOOD: 240,
+    AlertLevel.TARGET: 120,
+    AlertLevel.WARNING: 30,
+    AlertLevel.EMERGENCY: 5,
 }
 
 # TODO: implement missing-data alerts
@@ -199,9 +208,9 @@ class GlucoseMonitor:
             # No change -- do nothing, regardless of last alert's type
             return None
         if current_alert_level.value > latest_alert_level.value:
-            # Recovery -- only send if the most recent 3 values are all above the last alert level's threshold
+            # Recovery -- only send if every value in the recovery-by-level window is above the last alert level's threshold
             threshold = ALERT_LEVEL_THRESHOLDS[latest_alert_level]
-            recent_values = [d["value"] for d in self.data[-3:]]
+            recent_values = [d["value"] for d in self.data if datetime.fromisoformat(d["timestamp"]) > datetime.now() - timedelta(minutes=RECOVERY_CONSECUTIVE_MINUTES_THRESHOLDS[latest_alert_level])]
             if len(recent_values) < 3 or not all(v >= threshold for v in recent_values):
                 return None
             return {"level": current_alert_level, "type": "RECOVERY"}
