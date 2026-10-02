@@ -87,7 +87,9 @@ class Config:
     signal_api_url: str
     signal_sender: str
     signal_recipient: str
+    signal_emergency_recipient: typing.Optional[str]
     force_send_test: bool
+    send_test_alerts_to_emergency_recipient: bool
 
 class GlucoseMonitor:
     email_client: EmailClient
@@ -96,6 +98,7 @@ class GlucoseMonitor:
     data: typing.Any
     alerts: typing.Any
     force_send_test: bool
+    send_test_alerts_to_emergency_recipient: bool
 
     def __init__(self, config: Config, injected_data=None, injected_alerts=None):
         self.email_client = EmailClient(sender=config.email_sender)
@@ -103,11 +106,13 @@ class GlucoseMonitor:
             api_url=config.signal_api_url,
             sender=config.signal_sender,
             recipient=config.signal_recipient,
+            emergency_recipient=config.signal_emergency_recipient,
         )
         self.libre_client = PyLibreLinkUp(email=config.libre_username, password=config.libre_password)
         self.data = injected_data if injected_data is not None else self.load_data()
         self.alerts = injected_alerts if injected_alerts is not None else self.load_alerts()
         self.force_send_test = config.force_send_test
+        self.send_test_alerts_to_emergency_recipient = config.send_test_alerts_to_emergency_recipient
 
     def load_alerts(self):
         os.makedirs('data', exist_ok=True)
@@ -324,13 +329,9 @@ class GlucoseMonitor:
 
     def format_email_body_text(self, alert: dict) -> str:
         value = self.latest_stored_value["value"]
-        level_name = alert["level"].name
-        alert_type = alert["type"]
-
-        type_description = "RECOVERY" if alert_type == "RECOVERY" else "ALERT"
         lines = [
             f"Current reading: {value} mmol/L",
-            f"Status: {type_description} — {level_name}",
+            f"Status: {alert["type"].title()} — {alert["level"].name.title()}",
             "",
             self.get_advice(alert),
         ]
@@ -345,12 +346,9 @@ class GlucoseMonitor:
 
         return "\n".join(lines)
 
-    def format_email_body_html(self, alert: dict, graph_html: typing.Optional[str] = None) -> str:
+    def format_email_body_html(self, alert: dict, graph_html: typing.Optional[str] = None,) -> str:
         value = self.latest_stored_value["value"]
-        level_name = alert["level"].name
-        alert_type = alert["type"]
-
-        emoji = "⬆️" if alert_type == "RECOVERY" else "⬇️"
+        emoji = "⬆️" if alert["type"] == "RECOVERY" else "⬇️"
         status_color = ALERT_LEVEL_COLORS[alert["level"]]
         advice = self.get_advice(alert)
         if graph_html is None:
@@ -372,21 +370,20 @@ class GlucoseMonitor:
         return body_template.substitute(
             status_color=status_color,
             emoji=emoji,
-            alert_type_title=alert_type.title(),
+            alert_type_title=alert["type"].title(),
             value=value,
-            level_name=level_name,
+            level_name=alert["level"].name.title(),
             advice=advice,
             graph_html=graph_html,
             alerts_html=alerts_html,
         )
 
-    def format_signal_message(self, alert: dict) -> str:
+    def format_signal_message(self, alert: dict, to_emergency_recipient: bool = False) -> str:
         value = self.latest_stored_value["value"]
-        level_name = alert["level"].name
-        alert_type = alert["type"]
-        emoji = "⬆️" if alert_type == "RECOVERY" else "🌈" if level_name == AlertLevel.TEST.name else "⬇️"
+        level_name = "EMERGENCY TEST" if to_emergency_recipient and alert["level"] == AlertLevel.TEST else alert["level"].name
+        emoji = "⬆️" if alert["type"] == "RECOVERY" else "🌈" if alert["level"] == AlertLevel.TEST else "⬇️"
         advice = self.get_advice(alert)
-        return f"{emoji} Chips Glucose {alert_type.title()}\n\nReading: {value} mmol/L — {level_name}\n\n{advice}"
+        return f"{emoji} Chips Glucose {alert["type"].title()}\n\nReading: {value} mmol/L — {level_name.title()}\n\n{advice}"
 
     def render_html_to_image(self, html: str) -> bytes:
         with sync_playwright() as p:
@@ -438,8 +435,16 @@ class GlucoseMonitor:
                 self.signal_client.send(
                     self.format_signal_message(alert),
                     base64_attachments=[attachment],
-                )
-                log(f"Successfully sent Signal message!")
+                    send_to_emergency_recipient=False)
+                log(f"Successfully sent Signal message to primary recipient!")
+                    
+                if alert["level"] in [AlertLevel.EMERGENCY, AlertLevel.WARNING] or (self.send_test_alerts_to_emergency_recipient is True and alert["level"] == AlertLevel.TEST):
+                    self.signal_client.send(
+                        self.format_signal_message(alert, to_emergency_recipient=True),
+                        base64_attachments=[attachment],
+                        send_to_emergency_recipient=True
+                    )
+                log(f"Successfully sent Signal message to emergency recipient!")
             except Exception as e:
                 log(f"Error sending Signal message!")
                 print("Error:", e)
@@ -467,9 +472,11 @@ def main():
         signal_api_url=os.getenv("SIGNAL_API_URL", ""),
         signal_sender=os.getenv("SIGNAL_SENDER", ""),
         signal_recipient=os.getenv("SIGNAL_RECIPIENT", ""),
+        signal_emergency_recipient=os.getenv("SIGNAL_EMERGENCY_RECIPIENT", None),
         libre_username=os.getenv("LIBRE_USERNAME", ""),
         libre_password=os.getenv("LIBRE_PASSWORD", ""),
-        force_send_test=(os.getenv("FORCE_SEND_TEST") == "true"))
+        force_send_test=(os.getenv("FORCE_SEND_TEST") == "true"),
+        send_test_alerts_to_emergency_recipient=(os.getenv("SEND_TEST_ALERTS_TO_EMERGENCY_RECIPIENT") == "true"))
 
     monitor = GlucoseMonitor(config)
 

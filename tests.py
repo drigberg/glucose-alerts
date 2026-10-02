@@ -8,9 +8,11 @@ test_config = Config(
     signal_api_url="http://localhost:8080",
     signal_sender="+1234567890",
     signal_recipient="group.fake",
+    signal_emergency_recipient="group2.fake",
     libre_username="test@example.com",
     libre_password="test",
     force_send_test=False,
+    send_test_alerts_to_emergency_recipient=False,
 )
 
 class TestGlucoseMonitor(unittest.TestCase):
@@ -431,8 +433,8 @@ class TestGlucoseMonitor(unittest.TestCase):
         alert = {"level": AlertLevel.EMERGENCY, "type": "ALERT"}
         body = monitor.format_email_body_text(alert)
         self.assertIn("4.5", body)
-        self.assertIn("ALERT", body)
-        self.assertIn("EMERGENCY", body)
+        self.assertIn("Alert", body)
+        self.assertIn("Emergency", body)
         self.assertIn("dangerously low", body)
         self.assertIn("Recent alerts today", body)
 
@@ -446,7 +448,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         alert = {"level": AlertLevel.GOOD, "type": "RECOVERY"}
         body = monitor.format_email_body_text(alert)
         self.assertIn("12.0", body)
-        self.assertIn("RECOVERY", body)
+        self.assertIn("Recovery", body)
         self.assertIn("out of his target range, but still in a good place", body)
 
     def test_format_email_body_text_no_todays_alerts(self):
@@ -498,7 +500,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         alert = {"level": AlertLevel.EMERGENCY, "type": "ALERT"}
         html = monitor.format_email_body_html(alert)
         self.assertIn("4.5", html)
-        self.assertIn("EMERGENCY", html)
+        self.assertIn("Emergency", html)
         self.assertIn("dangerously low", html)
         self.assertIn("<!DOCTYPE html>", html)
         self.assertIn("Recent Alerts Today", html)
@@ -682,7 +684,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         alert = {"level": AlertLevel.EMERGENCY, "type": "ALERT"}
         message = monitor.format_signal_message(alert)
         self.assertIn("4.5", message)
-        self.assertIn("EMERGENCY", message)
+        self.assertIn("Emergency", message)
         self.assertIn("⬇️", message)
         self.assertIn("dangerously low", message)
 
@@ -699,6 +701,33 @@ class TestGlucoseMonitor(unittest.TestCase):
         self.assertIn("⬆️", message)
         self.assertIn("Recovery", message)
 
+    def test_format_signal_message_test_alert_emergency_recipient(self):
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": "2026-09-17T12:01:00", "value": 14.5}
+            ],
+            injected_alerts=[])
+        alert = {"level": AlertLevel.TEST, "type": "ALERT"}
+        message = monitor.format_signal_message(alert, to_emergency_recipient=True)
+        self.assertIn("14.5", message)
+        self.assertIn("Emergency Test", message)
+        self.assertIn("just a test", message)
+
+    def test_format_signal_message_test_recovery_emergency_recipient(self):
+        monitor = GlucoseMonitor(
+            config=test_config,
+            injected_data=[
+                {"timestamp": "2026-09-17T12:01:00", "value": 15.5}
+            ],
+            injected_alerts=[])
+        alert = {"level": AlertLevel.TEST, "type": "ALERT"}
+        message = monitor.format_signal_message(alert, to_emergency_recipient=True)
+        self.assertIn("15.5", message)
+        self.assertIn("Emergency Test", message)
+        self.assertIn("just a test", message)
+
+
     def test_force_send_test_returns_test_alert(self):
         monitor = GlucoseMonitor(
             config=Config(
@@ -706,9 +735,11 @@ class TestGlucoseMonitor(unittest.TestCase):
                 signal_api_url="http://localhost:8080",
                 signal_sender="+31630645264",
                 signal_recipient="group.YkpJNzZNME1mSlFiNW9qTU5QUnRWdFRGV2dhUzVkNjd3c2JVWjduMXNMOD0=",
+                signal_emergency_recipient=None,
                 libre_username="test@example.com",
                 libre_password="test",
-                force_send_test=True),
+                force_send_test=True,
+                send_test_alerts_to_emergency_recipient=False),
             injected_data=[
                 {"timestamp": "2026-09-17T12:00:00", "value": 27.8},
             ],
@@ -725,9 +756,11 @@ class TestGlucoseMonitor(unittest.TestCase):
                 signal_api_url="http://localhost:8080",
                 signal_sender="+31630645264",
                 signal_recipient="group.YkpJNzZNME1mSlFiNW9qTU5QUnRWdFRGV2dhUzVkNjd3c2JVWjduMXNMOD0=",
+                signal_emergency_recipient=None,
                 libre_username="test@example.com",
                 libre_password="test",
-                force_send_test=True),
+                force_send_test=True,
+                send_test_alerts_to_emergency_recipient=False),
             injected_data=[
                 {"timestamp": "2026-09-17T12:00:00", "value": 4.0},
             ],
@@ -753,7 +786,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         alert = {"level": AlertLevel.TEST, "type": "ALERT"}
         html = monitor.format_email_body_html(alert)
         self.assertIn("#8e24aa", html)
-        self.assertIn("TEST", html)
+        self.assertIn("Test", html)
 
     def test_format_signal_message_test(self):
         monitor = GlucoseMonitor(
@@ -765,7 +798,7 @@ class TestGlucoseMonitor(unittest.TestCase):
         alert = {"level": AlertLevel.TEST, "type": "ALERT"}
         message = monitor.format_signal_message(alert)
         self.assertIn("20.0", message)
-        self.assertIn("TEST", message)
+        self.assertIn("Test", message)
         self.assertIn("test", message.lower())
 
 if __name__ == '__main__':
