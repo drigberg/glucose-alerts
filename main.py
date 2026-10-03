@@ -17,6 +17,8 @@ from pylibrelinkup import PyLibreLinkUp
 
 MIN_SECONDS_SINCE_LAST_DATA_FOR_FETCH = 50.0
 
+VERSION = "1.0.0"
+
 class AlertLevel(Enum):
     TEST = 5
     SILENT = 4
@@ -431,7 +433,7 @@ class GlucoseMonitor:
                 png_b64 = base64.b64encode(png_bytes).decode("ascii")
                 attachment = f"data:image/png;base64,{png_b64}"
 
-                log(f"Sending Signal message... (attachment size: {len(png_bytes)} bytes)")
+                log(f"Sending Signal message to primary recipient... (attachment size: {len(png_bytes)} bytes)")
                 self.signal_client.send(
                     self.format_signal_message(alert),
                     base64_attachments=[attachment],
@@ -439,12 +441,13 @@ class GlucoseMonitor:
                 log(f"Successfully sent Signal message to primary recipient!")
                     
                 if alert["level"] in [AlertLevel.EMERGENCY, AlertLevel.WARNING] or (self.send_test_alerts_to_emergency_recipient is True and alert["level"] == AlertLevel.TEST):
+                    log(f"Sending Signal message to emergency recipient... (attachment size: {len(png_bytes)} bytes)")
                     self.signal_client.send(
                         self.format_signal_message(alert, to_emergency_recipient=True),
                         base64_attachments=[attachment],
                         send_to_emergency_recipient=True
                     )
-                log(f"Successfully sent Signal message to emergency recipient!")
+                    log(f"Successfully sent Signal message to emergency recipient!")
             except Exception as e:
                 log(f"Error sending Signal message!")
                 print("Error:", e)
@@ -464,7 +467,7 @@ class GlucoseMonitor:
             self.save_alerts()
     
 def main():
-    log("Running script!")
+    log(f"Running script! Version: ${VERSION}")
 
     load_dotenv()
     config = Config(
